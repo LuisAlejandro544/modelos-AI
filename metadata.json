@@ -1,0 +1,6 @@
+{
+  "name": "AI Local",
+  "description": "App móvil para ejecutar y chatear con modelos de inteligencia artificial locales en Android con configuración de parámetros.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

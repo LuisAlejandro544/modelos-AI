@@ -1,0 +1,22 @@
+[package]
+name = "local_ai_rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["AI Local Developer"]
+description = "High-performance safe memory Rust inference engine for local AI on Android"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# JNI bindings for communication between Android Kotlin and Rust
+jni = { version = "0.21", default-features = false }
+log = "0.4"
+android_logger = "0.13"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
