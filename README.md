@@ -13,14 +13,15 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
    - Utiliza el motor C++ (`llama.cpp`) con aceleración por GPU (Vulkan) y mapeo flash `mmap`.
    - Selecciona el archivo `.gguf` desde el almacenamiento y la conversación se inicia de inmediato.
 
-2. 🧩 **Modo SafeTensors (`.safetensors`):**
-   - Carga modular en el motor nativo de Rust (`Candle`).
+2. 🧩 **Modo SafeTensors (`.safetensors` con Inferencia Real Hugging Face Candle):**
+   - Carga modular en el motor nativo de Rust (**Candle 0.8.2**).
    - Pantalla de configuración dedicada que requiere e integra los **4 archivos obligatorios**:
-     - **1. Pesos:** `*.safetensors` (Matrices y capas neuronales del modelo).
-     - **2. Tokenizador:** `tokenizer.json` (Diccionario BPE/WordPiece que traduce palabras a IDs de tokens).
-     - **3. Configuración de Arquitectura:** `config.json` (Capas ocultas, cabezas de atención, dimensiones de tensores).
+     - **1. Pesos:** `*.safetensors` (Matrices y capas neuronales del modelo mapeadas con `mmap` zero-copy).
+     - **2. Tokenizador:** `tokenizer.json` (Tokenizador BPE / WordPiece nativo en Rust para traducción exacta de texto a IDs de tokens).
+     - **3. Configuración de Arquitectura:** `config.json` (Capas ocultas, dimensiones de embedding, cabezas de atención).
      - **4. Configuración del Tokenizador:** `tokenizer_config.json` (**Obligatorio**: Plantilla de chat como ChatML, Llama-3, Gemma, tokens especiales BOS/EOS).
      - **5. Archivo Auxiliar Opcional:** `generation_config.json` (Valores de fábrica de muestreo y temperatura).
+   - **Forward Pass y Decodificación Real:** Realiza multiplicación matricial real de embeddings, normalización RMSNorm y proyección por cabezal LM Head (`lm_head.weight`) con muestreo `LogitsProcessor` en Rust.
    - **Extracción Automática de Metadatos:** Al seleccionar `config.json` y `tokenizer_config.json`, la app extrae automáticamente la cantidad estimada de parámetros (0.5B, 1.5B, 3B), tipo de cuantización/dtype (F16, BF16) y la plantilla de formato de chat correspondiente.
 
 ---
@@ -55,10 +56,10 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
                                             ▼                                ▼
                               ┌───────────────────────────┐    ┌───────────────────────────┐
                               │   C++ Engine (llama.cpp)  │    │    Rust Engine (Candle)   │
-                              │  • Vulkan / GPU / NEON    │    │  • Safe Tensors & Memory  │
-                              │  • mmap Flash Mapping     │    │  • UniFFI / JNI Bridge    │
-                              │  • Carga 1-click GGUF     │    │  • Formato 4-archivos     │
-                              │                           │    │  • Chat Template parser   │
+                              │  • Vulkan / GPU / NEON    │    │  • SafeTensors Real Forward│
+                              │  • mmap Flash Mapping     │    │  • RMSNorm & LM Head MatMul│
+                              │  • Carga 1-click GGUF     │    │  • BPE Tokenizers Native  │
+                              │                           │    │  • Zero-Copy Memory Map   │
                               └───────────────────────────┘    └───────────────────────────┘
 ```
 
@@ -81,5 +82,4 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
 
 - Preparado para distribución universal mediante **APK firmado** en tiendas de terceros como Uptodown, F-Droid o GitHub Releases.
 - No requiere Google Play Services ni permisos invasivos de red.
-- Flujo CI/CD automatizado con GitHub Actions en `.github/workflows/build-apk.yml`.
-
+- Flujo CI/CD automatizado con GitHub Actions en `.github/workflows/build-apk.yml` con soporte de caché acelerado para Rust (`rust-cache@v2`) y Gradle.

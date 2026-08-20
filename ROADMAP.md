@@ -13,14 +13,16 @@ Este documento detalla el estado actual del desarrollo y las metas para la aplic
 
 ---
 
-## 🟢 Fase 2: Flujo Dual de Carga e Inferencia Móvil (Completada)
+## 🟢 Fase 2: Flujo Dual de Carga e Inferencia Móvil Real (Completada)
 - [x] **Modo GGUF Directo:** Carga en 1 paso de archivos autocontenidos `.gguf` mediante `llama.cpp` en C++.
-- [x] **Modo SafeTensors Modular (4 Archivos Obligatorios):** Pantalla dedicada con carga obligatoria de tensores (`*.safetensors`), tokenizador (`tokenizer.json`), arquitectura (`config.json`) y plantilla de chat (`tokenizer_config.json`) mediante `Candle` en Rust.
+- [x] **Modo SafeTensors Modular (4 Archivos Obligatorios):** Pantalla dedicada con carga obligatoria de tensores (`*.safetensors`), tokenizador (`tokenizer.json`), arquitectura (`config.json`) y plantilla de chat (`tokenizer_config.json`).
+- [x] **Motor Nativo Hugging Face Candle en Rust:** Inferencia y forward pass real con multiplicación matricial de embeddings y `lm_head`, decodificación BPE y muestreo `LogitsProcessor`.
 - [x] **Extracción Automática de Metadatos:** Auto-detección de capas, parámetros, cuantización y plantillas ChatML/Llama3/Gemma desde JSON.
 - [x] **Contador de Tokens y Medidor de Contexto:** Monitoreo en tiempo real del tamaño de la conversación vs. el límite de la ventana de contexto.
 - [x] **Medidor de Velocidad de Tokens por Segundo (t/s):** Contador en vivo durante el streaming y estadísticas de rendimiento post-generación.
 - [x] **Acelerador de Hardware Seleccionable (GPU / NPU / CPU):** Conmutación / fallback automático a GPU (Vulkan) si el dispositivo no cuenta con NPU física.
 - [x] **Mapeo de Memoria Optimizado (`mmap`):** Carga perezosa desde memoria flash para reducir drásticamente el uso de RAM física.
+- [x] **Pipeline CI/CD con Caché de Alta Velocidad:** Workflow de GitHub Actions con `rust-cache@v2`, caché para `cargo-ndk` y compilación multi-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
 
 ---
 

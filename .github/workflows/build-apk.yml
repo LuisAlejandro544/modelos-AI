@@ -26,11 +26,26 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
-      - name: Instalar cargo-ndk
+      # 4. Configurar Caché inteligente para Rust, crates y artefactos Candle
+      - name: Configurar Caché para Rust y dependencias Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src/main/rust -> target
+
+      - name: Caché para binario cargo-ndk
+        uses: actions/cache@v4
+        id: cache-cargo-ndk
+        with:
+          path: ~/.cargo/bin/cargo-ndk
+          key: ${{ runner.os }}-cargo-ndk-bin
+
+      - name: Instalar cargo-ndk (si no está en caché)
+        if: steps.cache-cargo-ndk.outputs.cache-hit != 'true'
         run: |
           cargo install cargo-ndk || true
 
-      # 4. Compilar librería nativa Rust Candle (liblocal_ai_rust.so) para ABIs Android
+      # 5. Compilar librería nativa Rust Candle (liblocal_ai_rust.so) para ABIs Android
       - name: Compilar librería nativa Rust Candle
         run: |
           echo "=== Compilando Hugging Face Candle SafeTensors para Android con cargo-ndk ==="
@@ -39,14 +54,14 @@ jobs:
           cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../jniLibs build --release || true
           cd ../../../..
 
-      # 5. Configurar Gradle oficial con la versión exacta del proyecto (9.3.1)
+      # 6. Configurar Gradle oficial con la versión exacta del proyecto (9.3.1) y caché activo
       - name: Configurar Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
           cache-read-only: false
 
-      # 6. Generar la llave de firma Debug (debug.keystore) en la raíz del proyecto
+      # 7. Generar la llave de firma Debug (debug.keystore) en la raíz del proyecto
       - name: Generar debug.keystore en la raíz del proyecto
         run: |
           echo "=== Configurando debug.keystore para compilación ==="
@@ -84,14 +99,14 @@ jobs:
           ls -la debug.keystore
           keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
 
-      # 7. Dar permisos de ejecución al wrapper de Gradle (si existe)
+      # 8. Dar permisos de ejecución al wrapper de Gradle (si existe)
       - name: Preparar Gradle Wrapper
         run: |
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
           fi
 
-      # 8. Compilar el APK en modo Debug
+      # 9. Compilar el APK en modo Debug
       - name: Compilar APK Debug con Gradle
         run: |
           if [ ! -s debug.keystore ]; then
@@ -104,7 +119,7 @@ jobs:
             gradle assembleDebug --no-daemon --stacktrace
           fi
 
-      # 9. Subir el APK como artefacto descargable en GitHub Actions
+      # 10. Subir el APK como artefacto descargable en GitHub Actions
       - name: Subir APK Debug como Artefacto
         uses: actions/upload-artifact@v4
         with:

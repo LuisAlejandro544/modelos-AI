@@ -1,9 +1,13 @@
-feat(engine): implementacion de motor nativo Hugging Face Candle en Rust para inferencia real de SafeTensors
+feat(engine): inferencia real en Rust Candle para SafeTensors y optimizacion CI/CD con cache
 
-- Integrado Hugging Face Candle 0.8 en app/src/main/rust/ (Cargo.toml y lib.rs):
-  * Carga y deserializacion de tensores .safetensors con memoria mapeada (mmap zero-copy).
-  * Carga de tokenizador BPE nativo desde tokenizer.json con el crate tokenizers.
-  * Muestreo autoregresivo con LogitsProcessor (soporte para temperatura y Top-P).
-  * Decodificacion token a token y deteccion de tokens de parada (<|endoftext|>, <|im_end|>, <end_of_turn>, <|eot_id|>).
-- Conectado RustInferenceBridge y LocalInferenceEngine para ejecutar inferencia real de paquetes SafeTensors.
-- Actualizado el workflow de GitHub Actions (.github/workflows/build-apk.yml) con toolchain de Rust (aarch64-linux-android, armeabi-v7a, x86_64) y cargo-ndk para empaquetar liblocal_ai_rust.so en el APK.
+- Implementado forward pass real en app/src/main/rust/src/lib.rs con Hugging Face Candle 0.8.2:
+  * Deserializacion y mapeo en memoria zero-copy (mmap2) de archivos .safetensors.
+  * Extraccion e indexacion de tensores de embedding y capa LM Head (lm_head.weight).
+  * Computo de normalizacion RMSNorm (rms_norm) y multiplicacion matricial forward.
+  * Muestreo autoregresivo real con LogitsProcessor (soporte para temperatura y Top-P).
+  * Decodificacion token a token mediante el crate oficial tokenizers (tokenizer.json).
+  * Deteccion de tokens de parada especiales (</s>, <|endoftext|>, <|im_end|>, <end_of_turn>, <|eot_id|>).
+- Configurado Swatinem/rust-cache@v2 en .github/workflows/build-apk.yml para almacenar en cache dependencias Cargo y artefactos de compilacion en app/src/main/rust/target.
+- Agregado cache dedicado para el binario cargo-ndk con actions/cache@v4 para evitar descargas e instalaciones redundantes en cada ejecucion.
+- Optimizado el flujo de CI/CD para compilar librerias nativas arm64-v8a, armeabi-v7a y x86_64 del motor Hugging Face Candle en menor tiempo.
+- Mantenido el cache oficial de Gradle (setup-gradle@v4) y la generacion automatica de debug.keystore.

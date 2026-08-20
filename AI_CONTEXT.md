@@ -1,7 +1,7 @@
 # 🧠 AI Context & Arquitectura del Proyecto
 
 ## Propósito del Proyecto
-Esta aplicación es un cliente nativo de Inteligencia Artificial para Android que ejecuta modelos de lenguaje (LLMs / SLMs) en formatos `.gguf` y `.safetensors` de forma **100% local, offline y privada**, sin dependencias de servicios en la nube, sin llamadas simuladas a Gemini por detrás y con control total del usuario sobre sus propios archivos.
+Esta aplicación es un cliente nativo de Inteligencia Artificial para Android que ejecuta modelos de lenguaje (LLMs / SLMs) en formatos `.gguf` y `.safetensors` de forma **100% local, offline y privada**, sin dependencias de servicios en la nube, sin llamadas simuladas a APIs externas y con control total del usuario sobre sus propios archivos.
 
 ---
 
@@ -11,15 +11,15 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
    - Selección de un único archivo `.gguf` que contiene pesos, vocabulario y metadatos de arquitectura en un solo binario.
    - Enrutado al motor nativo C++ (`llama.cpp`) con soporte para GPU Vulkan y `mmap`.
 
-2. **Modo SafeTensors (`.safetensors`):**
+2. **Modo SafeTensors (`.safetensors` - Inferencia Real con Hugging Face Candle):**
    - Pantalla dedicada para seleccionar por separado los 4 archivos obligatorios:
-     1. Pesos: `*.safetensors`
-     2. Tokenizador: `tokenizer.json` (conversión de texto a IDs de tokens)
-     3. Configuración de modelo: `config.json` (capas, dimensiones, cabezas de atención)
-     4. Configuración del Tokenizador: `tokenizer_config.json` (Plantillas ChatML, Llama-3, Gemma, tokens especiales)
+     1. Pesos: `*.safetensors` (tensores binarios deserializados con `mmap` zero-copy).
+     2. Tokenizador: `tokenizer.json` (conversión real de texto a IDs de tokens con el crate `tokenizers` en Rust).
+     3. Configuración de modelo: `config.json` (capas, dimensiones de embedding, cabezas de atención).
+     4. Configuración del Tokenizador: `tokenizer_config.json` (Plantillas ChatML, Llama-3, Gemma, tokens especiales).
      5. Archivo auxiliar opcional: `generation_config.json`.
+   - **Forward Pass Real en Rust (`lib.rs`):** Indexación de tensores de embedding, normalización `rms_norm`, multiplicación matricial hacia `lm_head` y muestreo probabilístico con `LogitsProcessor` (temperatura, Top-P).
    - Extracción reactiva de metadatos JSON al seleccionar archivos.
-   - Enrutado al motor nativo Rust (`Candle`) con decodificación de tokens, plantillas de chat y seguridad de memoria.
 
 ---
 
@@ -47,5 +47,6 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
 - **UI:** Jetpack Compose con Material Design 3 (M3).
 - **Patrón:** MVVM con `StateFlow` y `collectAsStateWithLifecycle`.
 - **C++ NDK:** `local_ai_engine.cpp` para `llama.cpp`.
-- **Rust NDK:** `local_ai_rust` (`Candle`).
+- **Rust NDK:** `local_ai_rust` (`Candle 0.8.2` con `safetensors`, `tokenizers` y `memmap2`).
+- **CI/CD:** GitHub Actions con caché para Rust (`rust-cache@v2`), `cargo-ndk` y Gradle.
 - **Testing:** Robolectric para tests locales en JVM y Roborazzi para capturas.
