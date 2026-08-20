@@ -1,5 +1,6 @@
 #include "streaming_engine.h"
 #include "sampler.h"
+#include "utf8_util.h"
 #include <android/log.h>
 #include <vector>
 
@@ -63,7 +64,7 @@ std::string StreamingEngine::generateStreaming(
 
     // Setup JNI Callback
     jmethodID onTokenMethod = nullptr;
-    if (callback) {
+    if (callback && env) {
         jclass callbackClass = env->GetObjectClass(callback);
         if (callbackClass) {
             onTokenMethod = env->GetMethodID(callbackClass, "onToken", "(Ljava/lang/String;I)Z");
@@ -96,6 +97,7 @@ std::string StreamingEngine::generateStreaming(
 
     std::vector<int32_t> generatedTokens;
     std::string fullResponse;
+    std::string streamingUtf8Buffer;
     int curPos = static_cast<int>(tokens.size());
     int eosToken = static_cast<int>(ctx->metadata.eosTokenId);
     if (eosToken <= 0) eosToken = 2; // Default </s> or <|im_end|>
@@ -117,20 +119,34 @@ std::string StreamingEngine::generateStreaming(
 
         generatedTokens.push_back(nextToken);
 
-        // Decode token piece
-        std::string piece = ctx->tokenizer.decodeToken(nextToken);
-        if (piece.empty()) {
-            piece = " ";
-        }
-        fullResponse += piece;
+        // Decode token piece safely
+        std::string rawPiece = ctx->tokenizer.decodeToken(nextToken);
+        if (!rawPiece.empty()) {
+            fullResponse += rawPiece;
+            streamingUtf8Buffer += rawPiece;
 
-        // Dispatch token piece via JNI callback
-        if (callback && onTokenMethod) {
-            jstring jPiece = env->NewStringUTF(piece.c_str());
-            jboolean keepGoing = env->CallBooleanMethod(callback, onTokenMethod, jPiece, static_cast<jint>(nextToken));
-            env->DeleteLocalRef(jPiece);
-            if (!keepGoing) {
-                break;
+            // Extract complete UTF-8 characters without splitting multi-byte code points
+            std::string readyChunk = Utf8Util::extractCompleteUtf8Prefix(streamingUtf8Buffer);
+
+            // Dispatch token piece via JNI callback
+            if (!readyChunk.empty() && callback && onTokenMethod && env) {
+                jstring jPiece = env->NewStringUTF(readyChunk.c_str());
+                if (jPiece) {
+                    jboolean keepGoing = env->CallBooleanMethod(
+                        callback, onTokenMethod, jPiece, static_cast<jint>(nextToken)
+                    );
+                    env->DeleteLocalRef(jPiece);
+
+                    if (env->ExceptionCheck()) {
+                        env->ExceptionClear();
+                        LOGW("JNI Exception detectada y limpiada durante streaming de tokens");
+                        break;
+                    }
+
+                    if (!keepGoing) {
+                        break;
+                    }
+                }
             }
         }
 
@@ -138,6 +154,21 @@ std::string StreamingEngine::generateStreaming(
         ctx->transformer.forwardToken(nextToken, curPos++, logits);
     }
 
+    // Flush any remaining characters in streaming buffer
+    if (!streamingUtf8Buffer.empty() && callback && onTokenMethod && env) {
+        std::string remainingSafe = Utf8Util::safeUtf8(streamingUtf8Buffer);
+        if (!remainingSafe.empty()) {
+            jstring jPiece = env->NewStringUTF(remainingSafe.c_str());
+            if (jPiece) {
+                env->CallBooleanMethod(callback, onTokenMethod, jPiece, static_cast<jint>(eosToken));
+                env->DeleteLocalRef(jPiece);
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                }
+            }
+        }
+    }
+
     LOGI("Generacion C++ completada: %zu tokens generados", generatedTokens.size());
-    return fullResponse;
+    return Utf8Util::safeUtf8(fullResponse);
 }

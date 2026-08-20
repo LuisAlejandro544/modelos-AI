@@ -20,92 +20,64 @@ Este documento detalla el estado actual del desarrollo y las metas para la aplic
   - [x] Carga nativa mediante Android File Descriptors (`ParcelFileDescriptor`) y memoria virtual `mmap`.
   - [x] Control nativo de cancelación de inferencia (`std::atomic<bool> isCancelled`).
   - [x] Enlace JNI y streaming reactivo hacia la UI de Compose con cálculo de métricas en vivo.
-- [x] **Modo SafeTensors Modular (4 Archivos Obligatorios):** Pantalla dedicada con carga obligatoria de tensores (`*.safetensors`), tokenizador (`tokenizer.json`), arquitectura (`config.json`) y plantilla de chat (`tokenizer_config.json`).
+- [x] **Modo SafeTensors Modular (4 Archivos Obligatorios):** Pantalla dedicada con carga de tensores (`*.safetensors`), tokenizador (`tokenizer.json`), arquitectura (`config.json`) y plantilla de chat (`tokenizer_config.json`).
 - [x] **Motor Nativo Hugging Face Candle en Rust:** Inferencia y forward pass real con multiplicación matricial de embeddings y `lm_head`, decodificación BPE y muestreo `LogitsProcessor`.
 - [x] **Extracción Automática de Metadatos:** Auto-detección de capas, parámetros, cuantización y plantillas ChatML/Llama3/Gemma desde JSON y cabeceras binarias.
 - [x] **Contador de Tokens y Medidor de Contexto:** Monitoreo en tiempo real del tamaño de la conversación vs. el límite de la ventana de contexto.
 - [x] **Medidor de Velocidad de Tokens por Segundo (t/s):** Contador en vivo durante el streaming y estadísticas de rendimiento post-generación.
 - [x] **Acelerador de Hardware Seleccionable (GPU / NPU / CPU):** Conmutación / fallback automático a GPU (Vulkan) si el dispositivo no cuenta con NPU física.
 - [x] **Mapeo de Memoria Optimizado (`mmap`):** Carga perezosa desde memoria flash para reducir drásticamente el uso de RAM física.
-- [x] **Pipeline CI/CD con Caché de Alta Velocidad:** Workflow de GitHub Actions con `rust-cache@v2`, CMake NDK y compilación multi-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
+- [x] **Pipeline CI/CD con Caché de Alta Velocidad y Empaquetado 7z Ultra:** Workflow de GitHub Actions con `rust-cache@v2`, CMake NDK, compilación multi-ABI y compresión con **7-Zip Ultra (LZMA2)** para descargas reducidas en conexiones móviles.
 
 ---
 
-## 🟢 Fase 2.5: Tokenización BPE / SentencePiece Nativa en C++ (Completada)
-- [x] **Desempaquetado de Vocabulario y Merges GGUF en C++:**
-  - [x] Lectura de arreglos `tokenizer.ggml.tokens`, `tokenizer.ggml.merges`, `tokenizer.ggml.scores` y `tokenizer.ggml.token_type` directamente desde metadatos GGUF en memoria mapeada.
-  - [x] Extracción de tokens especiales (`<s>`, `</s>`, `<|im_start|>`, `<|im_end|>`, `[INST]`, `<think>`, etc.).
-- [x] **Algoritmo de Tokenización BPE y SentencePiece en C++ (`bpe_tokenizer.cpp` / `bpe_tokenizer.h`):**
-  - [x] Codificación de texto UTF-8 a secuencia de IDs de tokens mediante fusiones iterativas por rango de prioridad de merges.
-  - [x] Soporte para prefijo y sustitución de espacios SentencePiece (` ` / `\u2581`).
-  - [x] Mecanismo de byte-fallback bidireccional (`<0xNN>` a bytes crudos y viceversa) para caracteres no contemplados en el vocabulario base.
-  - [x] Decodificación de secuencias de tokens e IDs individuales a cadenas de texto UTF-8 coherentes.
-- [x] **Integración JNI Completa:**
-  - [x] Métodos `tokenizeNative`, `decodeTokensNative` y `decodeTokenNative` en `NativeCppBridge.kt` y `local_ai_engine.cpp`.
-  - [x] Conexión directa en el contexto de ejecución nativo (`GgufExecutionContext`).
+## 🟢 Fase 2.5 a 2.8: Estabilización, Tokenización C++ y Control de Parámetros (Completada)
+- [x] **Tokenización BPE / SentencePiece Nativa en C++ (`bpe_tokenizer.cpp` / `bpe_tokenizer.h`):** Desempaquetado de vocabulario y merges GGUF en memoria mapeada con byte-fallback.
+- [x] **Dequantización y Forward Pass en C++ (`dequant_matmul.h` / `transformer_forward.h`):** Cuantizaciones Q4/Q8 aceleradas con ARM NEON SIMD, RMSNorm, RoPE y SwiGLU.
+- [x] **Muestreo Seguro y UTF-8 Streaming (`sampler.h`, `streaming_engine.cpp`, `utf8_util.h`):** Acumulador Modified-UTF-8 para evitar errores JNI en tokens multibyte y límites numéricos en logits.
+- [x] **Sanitización de Parámetros:** Clamping automático de contexto y parámetros numéricos (`InferenceParameters.sanitize()`).
 
 ---
 
-## 🟢 Fase 2.6: Dequantización y Forward Pass del Transformer en C++ (Completada)
-- [x] **Multiplicación Matricial y Dequantización en C++ (`dequant_matmul.h`):**
-  - [x] Bucle de dequantización y MatMul para bloques `Q4_0`, `Q8_0` y `Q4_K` con conversión flotante FP16->FP32.
-  - [x] Multiplicación vector-matriz acelerada por instrucciones vectoriales **ARM NEON** (`arm64-v8a` con `vmlaq_f32`, `vld1q_f32`).
-- [x] **Capas del Transformer y Forward Pass en C++ (`transformer_forward.h`):**
-  - [x] Capa de Embedding Lookup con dequantización de filas de pesos por ID de token.
-  - [x] Normalización **RMSNorm** (`rmsNorm`) para pre/post atención y pre/post FFN.
-  - [x] Proyecciones de Atención (Q, K, V) con incrustación posicional rotacional **RoPE** (`applyRope`).
-  - [x] Capa Feed-Forward SwiGLU / MLP con función de activación `SiLU` (`silu(x) = x * sigmoid(x)`).
-  - [x] Proyección final LM Head (`output.weight`) para generación de Logits por capa sobre el vocabulario.
+## 🟢 Fase 2.9: Rediseño M3, Telemetría Real, Persistencia de Modelos y Edición SafeTensors (Completada)
+- [x] **Rediseño Completo de la Pantalla Principal:** Eliminación del hero banner y diseño de cabecera limpia, espaciosa y accesible con tipografía Material Design 3.
+- [x] **Telemetría en Vivo de Hardware Real:**
+  - [x] Detección de modelo, fabricante (`Build.MANUFACTURER`, `Build.MODEL`) y SoC (`Build.SOC_MODEL` / Chipset).
+  - [x] Lectura de RAM real libre y total en GB (`ActivityManager.MemoryInfo`).
+  - [x] Lectura de almacenamiento libre disponible en almacenamiento interno (`StatFs`).
+  - [x] Detección de núcleos de CPU, ABI nativa y estado de aceleración GPU/NPU/NEON.
+- [x] **Biblioteca de Modelos Guardados y Persistencia:**
+  - [x] Persistencia automática en base de datos local SQLite/Room (`LocalAiDatabase`, `ModelEntity`).
+  - [x] Lista de modelos guardados directamente en la pantalla de bienvenida y en el selector modal.
+  - [x] Acción de inicio de conversación rápida en 1 toque.
+- [x] **Edición y Complementación Modular de SafeTensors:**
+  - [x] Interfaz de edición para modelos SafeTensors guardados que permite añadir o sustituir archivos faltantes (`tokenizer.json`, `config.json`, `tokenizer_config.json`, `generation_config.json`, prompt).
+  - [x] Sincronización inmediata con Room.
 
 ---
 
-## 🟢 Fase 2.7: Muestreo de Logits y Streaming Token por Token en C++ (Completada)
-- [x] **Muestreo de Logits en C++ (`sampler.h`):**
-  - [x] Implementación de **Penalización por Repetición** (*Repeat Penalty*) sobre tokens recientes.
-  - [x] Normalización de temperatura y cálculo de probabilidades probabilísticas con **Softmax**.
-  - [x] Filtros combinados **Top-K** y **Top-P (Nucleus Sampling)** con generación pseudoaleatoria `std::mt19937`.
-- [x] **Bucle Autorregresivo de Generación y Streaming JNI Token por Token:**
-  - [x] Método nativo `generateStreamingPromptNative` en `local_ai_engine.cpp` y `NativeCppBridge.kt`.
-  - [x] Callback JNI reactivo (`NativeTokenCallback.onToken(piece, tokenId)`) para emisión continua de texto sin esperas.
-  - [x] Detección de token de parada **EOS** (`</s>`, `<|im_end|>`) y parada interactiva en caliente (`isCancelled`).
+## 🟢 Fase 3: Administrador e Historial Completo de Chats con Room (Completada)
+- [x] **Inicio de Chat Limpio al Importar Modelo:** Creación automática de una sesión limpia desde 0 (`messages = emptyList()`) al importar un archivo GGUF o configurar un paquete SafeTensors.
+- [x] **Base de Datos Local Room para Sesiones y Mensajes:**
+  - [x] Entidad `ChatSessionEntity` y `ChatMessageEntity` con relaciones y DAO (`ChatDao`).
+  - [x] Guardado reactivo de prompts de usuario y respuestas del asistente con sus métricas (tok/s, latencia, hardware).
+- [x] **Diálogo de Historial de Chats:**
+  - [x] Explorador de conversaciones guardadas con timestamp, modelo utilizado, número de mensajes y previsualización.
+  - [x] Acción "+ Iniciar Nueva Conversación".
+  - [x] Reanudar conversaciones pasadas al instante.
+  - [x] Renombrar y eliminar sesiones de chat con confirmación.
+- [x] **Sección de Conversaciones Recientes:** Visualización directa en la pantalla principal para reanudación rápida.
 
 ---
 
-## 🟢 Fase 2.8: Validación y Acotado de Parámetros por Arquitectura (Completada)
-- [x] **Acotado Dinámico de Ventana de Contexto:**
-  - [x] Clamping de `contextWindow` limitado por la capacidad nativa del modelo (`model.contextLength`).
-  - [x] Visualización del límite arquitectónico con chip informativo en `ParametersDialog`.
-- [x] **Sincronización y Validación de Parámetros de Inferencia:**
-  - [x] Ajuste automático de `maxTokens` para garantizar que no sobrepase la ventana de contexto.
-  - [x] Límites matemáticos seguros para temperatura (`0.0` - `2.0`), top-p (`0.01` - `1.0`), top-k (`1` - `100`), repeat penalty (`1.0` - `2.0`) e hilos de CPU.
-  - [x] Método de saneamiento `sanitize()` en `InferenceParameters.kt` integrado en UI, ViewModel y motores nativos.
-  - [x] Suite de pruebas unitarias automatizadas para verificación de límites.
+## 🟡 Fase 4: Exportación y Gestión de KV-Cache (Próxima)
+- [ ] Exportación de chats a formato Markdown (`.md`) y texto plano para compartir.
+- [ ] Búsqueda y filtrado de mensajes históricos por palabra clave.
+- [ ] Gestión inteligente de KV-Cache para conversaciones largas (truncado deslizante y compresión).
 
 ---
 
-## 🟢 Fase 2.9: Preparación de Terreno para TensorFlow Lite / LiteRT (Completada)
-- [x] **Integración de Dependencias TFLite en Gradle:**
-  - [x] `tensorflow-lite` (2.16.1), `tensorflow-lite-gpu` (2.16.1) y `tensorflow-lite-support` (0.4.4).
-- [x] **Modelos de Datos y Adaptación de Formato:**
-  - [x] `ModelFormatType.TFLITE` (.tflite / .task) y `InferenceBackend.TFLITE_RUNTIME`.
-  - [x] Mapeo y persistencia Room en `ModelEntity.kt`.
-- [x] **Experiencia de Usuario e Importación:**
-  - [x] Diálogo `ImportModelDialog` con reconocimiento automático de archivos `.tflite` y campos para tokenizadores / configuraciones complementarias.
-  - [x] Actualización de la guía `TokenizerGuideDialog` y selección en `ParametersDialog`.
-- [x] **Pruebas Unitarias de Mapeo TFLite:**
-  - [x] Caso de prueba automatizado `testTFLiteModel_EntityAndFormatMapping`.
-
----
-
-## 🟡 Fase 3: Persistencia y Gestión Avanzada de Chats (Próxima)
-- [ ] Base de datos local **Room** para guardar y reanudar múltiples conversaciones independientes.
-- [ ] Exportación de chats a formato Markdown (`.md`) y texto plano.
-- [ ] Búsqueda y filtrado de mensajes históricos.
-- [ ] Gestión inteligente de KV-Cache para conversaciones largas (truncado o resumen automático).
-
----
-
-## 🟣 Fase 4: Capacidades Multimodales y RAG Local
+## 🟣 Fase 5: Capacidades Multimodales y RAG Local
 - [ ] **RAG Local (Chat con Documentos):** Procesamiento e indexación local de archivos PDF/TXT para responder preguntas sobre documentos sin internet.
 - [ ] **Visión Local (VLM):** Soporte para modelos ligeros de visión (ej. Moondream / Llama 3.2 Vision) usando la cámara del teléfono.
 - [ ] **Transferencia Wi-Fi Local:** Servidor embebido para transferir modelos GGUF pesados desde una computadora al teléfono sin cables.

@@ -1,6 +1,5 @@
 package com.example.ui.safetensors
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.model.LocalAiModel
 import com.example.ui.safetensors.components.FilePickerCard
 import com.example.ui.safetensors.components.SafeTensorsHeaderCard
 import com.example.ui.safetensors.components.SafeTensorsMetadataForm
@@ -40,6 +40,7 @@ import com.example.ui.safetensors.parser.ModelConfigParser
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SafeTensorsImportScreen(
+  initialModel: LocalAiModel? = null,
   onStartChat: (
     modelName: String,
     weightsUri: String,
@@ -56,24 +57,34 @@ fun SafeTensorsImportScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val isEditing = initialModel != null
 
-  var modelName by remember { mutableStateOf("") }
-  var paramSize by remember { mutableStateOf("0.5B") }
-  var quantization by remember { mutableStateOf("F16") }
-  var customPrompt by remember { mutableStateOf("Eres un asistente de IA local y privado ejecutado con tensores SafeTensors en Android.") }
-  var extractedMetadataInfo by remember { mutableStateOf<String?>(null) }
+  var modelName by remember(initialModel) { mutableStateOf(initialModel?.name ?: "") }
+  var paramSize by remember(initialModel) { mutableStateOf(initialModel?.parameterSize ?: "0.5B") }
+  var quantization by remember(initialModel) { mutableStateOf(initialModel?.quantization ?: "F16") }
+  var customPrompt by remember(initialModel) {
+    mutableStateOf(
+      initialModel?.defaultSystemPrompt
+        ?: "Eres un asistente de IA local y privado ejecutado con tensores SafeTensors en Android."
+    )
+  }
+  var extractedMetadataInfo by remember {
+    mutableStateOf(
+      if (isEditing) "Editando configuración del modelo: ${initialModel?.name}" else null
+    )
+  }
 
   // File URIs / Paths
-  var weightsUri by remember { mutableStateOf<String?>(null) }
-  var tokenizerUri by remember { mutableStateOf<String?>(null) }
-  var configUri by remember { mutableStateOf<String?>(null) }
-  var tokenizerConfigUri by remember { mutableStateOf<String?>(null) }
-  var generationConfigUri by remember { mutableStateOf<String?>(null) }
+  var weightsUri by remember(initialModel) { mutableStateOf(initialModel?.filePathOrUri) }
+  var tokenizerUri by remember(initialModel) { mutableStateOf(initialModel?.tokenizerPathOrUri) }
+  var configUri by remember(initialModel) { mutableStateOf(initialModel?.configPathOrUri) }
+  var tokenizerConfigUri by remember(initialModel) { mutableStateOf(initialModel?.tokenizerConfigPathOrUri) }
+  var generationConfigUri by remember(initialModel) { mutableStateOf(initialModel?.generationConfigPathOrUri) }
 
   // Activity Result Launchers for each separate file
   val weightsLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
-  ) { uri: Uri? ->
+  ) { uri ->
     uri?.let {
       weightsUri = it.toString()
       if (modelName.isBlank()) {
@@ -85,13 +96,13 @@ fun SafeTensorsImportScreen(
 
   val tokenizerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
-  ) { uri: Uri? ->
+  ) { uri ->
     uri?.let { tokenizerUri = it.toString() }
   }
 
   val configLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
-  ) { uri: Uri? ->
+  ) { uri ->
     uri?.let {
       configUri = it.toString()
       val meta = ModelConfigParser.parseConfigJson(context, it)
@@ -112,7 +123,7 @@ fun SafeTensorsImportScreen(
 
   val tokenizerConfigLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
-  ) { uri: Uri? ->
+  ) { uri ->
     uri?.let {
       tokenizerConfigUri = it.toString()
       val tokMeta = ModelConfigParser.parseTokenizerConfigJson(context, it)
@@ -125,7 +136,7 @@ fun SafeTensorsImportScreen(
 
   val generationConfigLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
-  ) { uri: Uri? ->
+  ) { uri ->
     uri?.let { generationConfigUri = it.toString() }
   }
 
@@ -144,12 +155,12 @@ fun SafeTensorsImportScreen(
         title = {
           Column {
             Text(
-              text = "Configuración SafeTensors",
+              text = if (isEditing) "Editar SafeTensors" else "Configuración SafeTensors",
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold
             )
             Text(
-              text = "Carga modular de tensores, tokenizador y plantillas",
+              text = if (isEditing) "Modifica o completa los archivos de tu modelo" else "Carga modular de tensores, tokenizador y plantillas",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -22,10 +22,11 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   ├── dequant_matmul.h        # Rutinas de decuantización Q4_0, Q8_0, Q4_K y MatMul vectorizado ARM NEON
 │   │   │   │   ├── transformer_forward.h   # Capas del Transformer (RMSNorm, RoPE, Attention, SwiGLU/FFN y LM Head)
 │   │   │   │   ├── sampler.h               # Muestreador de logits (Temperatura, Top-P, Top-K, Repeat Penalty y Softmax)
+│   │   │   │   ├── utf8_util.h             # Sanitizador Modified-UTF-8 para evitar excepciones JNI
 │   │   │   │   ├── context_manager.h       # Gestor modular de contextos de ejecución GGUF (thread-safe handles)
 │   │   │   │   ├── context_manager.cpp     # Asignación mmap, ciclo de vida de handles y liberación de memoria C++
 │   │   │   │   ├── streaming_engine.h      # Motor de evaluación y streaming autorregresivo desacoplado
-│   │   │   │   ├── streaming_engine.cpp    # Bucle autorregresivo, muestreo estocástico y dispatch de callbacks JNI
+│   │   │   │   ├── streaming_engine.cpp    # Bucle autorregresivo con acumulador UTF-8 y dispatch de callbacks JNI
 │   │   │   │   └── local_ai_engine.cpp     # Puntos de entrada JNI limpios que delegan a ContextManager y StreamingEngine
 │   │   │   ├── rust/               # Motor nativo Rust (Candle / UniFFI)
 │   │   │   │   ├── Cargo.toml
@@ -49,7 +50,8 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   │   │       ├── ChatSessionEntity.kt# Entidad Room para sesiones de conversación
 │   │   │   │   │   │       └── ChatMessageEntity.kt# Entidad Room para mensajes con métricas
 │   │   │   │   │   └── repository/
-│   │   │   │   │       └── ModelRepository.kt  # Repositorio reactivo respaldado por Room y StateFlow
+│   │   │   │   │       ├── ModelRepository.kt  # Repositorio Room para alta, edición y baja de modelos
+│   │   │   │   │       └── ChatRepository.kt   # Repositorio Room para historial, creación y borrado de chats
 │   │   │   │   ├── engine/
 │   │   │   │   │   ├── LocalInferenceEngine.kt       # Coordinador central de inferencia local y streaming
 │   │   │   │   │   ├── NativeCppBridge.kt            # JNI C++ (llama.cpp, NEON, Vulkan, tokenizador BPE/SPM nativo)
@@ -61,29 +63,30 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   │   ├── formatter/
 │   │   │   │   │   │   └── ChatTemplateFormatter.kt  # Formateo de plantillas de chat (ChatML, Llama-3, Gemma, Mistral)
 │   │   │   │   │   ├── hardware/
-│   │   │   │   │   │   └── HardwareCapabilityDetector.kt # Detección de specs, aceleradores (GPU/NPU/CPU) y memoria
+│   │   │   │   │   │   └── HardwareCapabilityDetector.kt # Telemetría real de SoC, RAM libre/total, almacenamiento, ABI y NPU
 │   │   │   │   │   └── metrics/
 │   │   │   │   │       └── InferenceMetricsTracker.kt    # Cálculo en tiempo real de tokens/segundo, latencia y contexto
 │   │   │   │   ├── model/
 │   │   │   │   │   ├── ChatMessage.kt                # Mensajes con métricas y estado en vivo
-│   │   │   │   │   ├── InferenceParameters.kt        # HardwareAccelerator, InferenceBackend (C++, Rust, TFLite), mmap y sanitize()
-│   │   │   │   │   └── LocalModel.kt                 # Definición de modelos GGUF/SafeTensors/TFLite y formatos
+│   │   │   │   │   ├── InferenceParameters.kt        # HardwareAccelerator, InferenceBackend (C++, Rust), mmap y sanitize()
+│   │   │   │   │   └── LocalModel.kt                 # Definición de modelos GGUF/SafeTensors y formatos
 │   │   │   │   ├── ui/
 │   │   │   │   │   ├── chat/
 │   │   │   │   │   │   ├── ChatScreen.kt             # Pantalla orquestadora de chat y diálogos
 │   │   │   │   │   │   └── components/
-│   │   │   │   │   │       ├── ChatTopBar.kt             # Barra superior con chip de modelo, parámetros y limpiar
+│   │   │   │   │   │       ├── ChatTopBar.kt             # Barra superior con historial, chip de modelo, parámetros y limpiar
 │   │   │   │   │   │       ├── ContextMeterBar.kt        # Barra de progreso de tokens, contexto y t/s en vivo
 │   │   │   │   │   │       ├── ChatInputBar.kt           # Barra de entrada de texto, botón Stop/Send e indicador Offline
 │   │   │   │   │   │       ├── ChatMessageBubble.kt      # Burbujas de mensajes con métricas y botón de copiado
 │   │   │   │   │   │       └── ChatWelcomeSuggestions.kt # Estado inicial con sugerencias de prompts
 │   │   │   │   │   ├── dialogs/
-│   │   │   │   │   │   ├── ImportModelDialog.kt      # Diálogo de importación multiformato (GGUF / SafeTensors / TFLite)
-│   │   │   │   │   │   ├── ModelSelectorDialog.kt    # Selector de modelos
-│   │   │   │   │   │   ├── ParametersDialog.kt       # Selector GPU/NPU/CPU, toggle mmap, contexto dinámico y backends (C++/Rust/TFLite)
-│   │   │   │   │   │   └── TokenizerGuideDialog.kt   # Guía de compatibilidad de archivos (GGUF vs SafeTensors vs TFLite)
+│   │   │   │   │   │   ├── ChatHistoryDialog.kt      # Diálogo modal de gestión e historial de chats (cambiar, renombrar, borrar)
+│   │   │   │   │   │   ├── ImportModelDialog.kt      # Diálogo de importación multiformato (GGUF / SafeTensors)
+│   │   │   │   │   │   ├── ModelSelectorDialog.kt    # Selector de modelos guardados con soporte de edición y borrado
+│   │   │   │   │   │   ├── ParametersDialog.kt       # Selector GPU/NPU/CPU, toggle mmap, contexto dinámico y backends (C++/Rust)
+│   │   │   │   │   │   └── TokenizerGuideDialog.kt   # Guía de compatibilidad de archivos (GGUF vs SafeTensors)
 │   │   │   │   │   ├── safetensors/
-│   │   │   │   │   │   ├── SafeTensorsImportScreen.kt# Pantalla orquestadora de importación SafeTensors
+│   │   │   │   │   │   ├── SafeTensorsImportScreen.kt# Pantalla de importación y edición modular de SafeTensors
 │   │   │   │   │   │   ├── components/
 │   │   │   │   │   │   │   ├── FilePickerCard.kt         # Selector de archivo individual con estado y acciones
 │   │   │   │   │   │   │   ├── SafeTensorsHeaderCard.kt  # Banner informativo de archivos requeridos y metadatos
@@ -92,15 +95,16 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   │   │       └── ModelConfigParser.kt      # Parser JSON de config.json y tokenizer_config.json
 │   │   │   │   │   ├── theme/                        # Colores, tipografía y tema Material 3
 │   │   │   │   │   └── welcome/
-│   │   │   │   │       └── WelcomeScreen.kt          # Pantalla inicial con specs de hardware y aceleración
+│   │   │   │   │       └── WelcomeScreen.kt          # Pantalla principal con telemetría, modelos guardados y chats recientes
 │   │   │   │   └── viewmodel/
-│   │   │   │       ├── ChatUiState.kt                # Estado inmutable de la UI, pantallas y cálculo de contexto
-│   │   │   │       └── ChatViewModel.kt              # Orquestador ligero de UI, corrutinas y eventos
+│   │   │   │       ├── ChatUiState.kt                # Estado inmutable de la UI, sesiones de chat y cálculo de contexto
+│   │   │   │       └── ChatViewModel.kt              # Orquestador ligero de UI, corrutinas, repositorio Room y eventos
 │   │   │   └── res/                                  # Drawables, mipmaps, strings y temas XML
 │   │   └── test/                                     # Tests unitarios y Robolectric
 │   │       ├── java/com/example/
 │   │       │   ├── ExampleUnitTest.kt                # Pruebas unitarias de Formatter, Metrics, Tokenizer, Entities y Repository
-│   │       │   └── ExampleRobolectricTest.kt         # Pruebas de integración Robolectric
+│   │       │   ├── ExampleRobolectricTest.kt         # Pruebas de integración Robolectric y Room
+│   │       │   └── GreetingScreenshotTest.kt         # Pruebas de captura Roborazzi
 │   ├── AGENTS.md                       # Directivas obligatorias para agentes de IA
 │   ├── AI_CONTEXT.md                   # Resumen técnico y arquitectura para agentes
 │   ├── commit_message.txt              # Mensaje descriptivo para el commit automático

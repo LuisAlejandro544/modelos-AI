@@ -1,5 +1,7 @@
 package com.example.viewmodel
 
+import com.example.data.local.entities.ChatSessionEntity
+import com.example.engine.hardware.HardwareCapabilityDetector
 import com.example.engine.hardware.SystemSpecs as EngineSystemSpecs
 import com.example.engine.metrics.InferenceMetricsTracker
 import com.example.model.ChatMessage
@@ -17,7 +19,11 @@ enum class CurrentScreen {
 data class ChatUiState(
   val currentScreen: CurrentScreen = CurrentScreen.WELCOME,
   val selectedModel: LocalAiModel? = null,
+  val editingSafeTensorsModel: LocalAiModel? = null,
   val customModels: List<LocalAiModel> = emptyList(),
+  val chatSessions: List<ChatSessionEntity> = emptyList(),
+  val currentSessionId: String? = null,
+  val currentSessionTitle: String = "Nueva conversación",
   val parameters: InferenceParameters = InferenceParameters(),
   val messages: List<ChatMessage> = emptyList(),
   val isGenerating: Boolean = false,
@@ -28,7 +34,8 @@ data class ChatUiState(
   val showParametersDialog: Boolean = false,
   val showClearChatDialog: Boolean = false,
   val showTokenizerGuideDialog: Boolean = false,
-  val systemSpecs: SystemSpecs = SystemSpecs()
+  val showHistoryDialog: Boolean = false,
+  val systemSpecs: SystemSpecs = HardwareCapabilityDetector.detectSystemSpecs()
 ) {
   val allAvailableModels: List<LocalAiModel>
     get() = customModels

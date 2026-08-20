@@ -53,7 +53,7 @@ class ModelRepository(
     val modelName = when {
       !displayName.isNullOrBlank() -> displayName
       meta != null && meta.isValid && meta.modelName.isNotBlank() && meta.modelName != "GGUF Model" -> meta.modelName
-      meta != null && meta.isValid && meta.architecture.isNotBlank() -> "${meta.architecture.replaceFirstChar { it.titlecase() }} GGUF (Local)"
+      meta != null && meta.isValid && meta.architecture.isNotBlank() -> "${meta.architecture.replaceFirstChar { it.titlecase() }} GGUF"
       else -> cleanFallbackName
     }
 
@@ -96,7 +96,7 @@ class ModelRepository(
       defaultSystemPrompt = "Eres un asistente de IA local ejecutado de forma privada desde tu archivo GGUF."
     )
 
-    _customModels.update { listOf(newModel) + it }
+    _customModels.update { listOf(newModel) + it.filterNot { m -> m.filePathOrUri == uriOrPath } }
     persistModel(newModel)
     return newModel
   }
@@ -137,6 +137,55 @@ class ModelRepository(
     _customModels.update { listOf(newModel) + it }
     persistModel(newModel)
     return newModel
+  }
+
+  fun updateSafeTensorsBundle(
+    modelId: String,
+    modelName: String,
+    weightsUri: String,
+    tokenizerUri: String,
+    configUri: String,
+    tokenizerConfigUri: String?,
+    generationConfigUri: String?,
+    paramSize: String,
+    quantization: String,
+    customPrompt: String
+  ): LocalAiModel {
+    val existing = _customModels.value.find { it.id == modelId }
+    val updatedModel = (existing ?: LocalAiModel(
+      id = modelId,
+      name = modelName,
+      developer = "Archivos SafeTensors",
+      parameterSize = paramSize,
+      quantization = quantization,
+      ramRequired = "Rust Candle",
+      speedEstimate = "~20-38 tok/s",
+      recommendedFor = "Inferencia modular SafeTensors",
+      downloadSize = "Local",
+      formatType = ModelFormatType.SAFETENSORS
+    )).copy(
+      name = modelName.ifBlank { "Modelo SafeTensors" },
+      filePathOrUri = weightsUri,
+      tokenizerPathOrUri = tokenizerUri,
+      configPathOrUri = configUri,
+      tokenizerConfigPathOrUri = tokenizerConfigUri,
+      generationConfigPathOrUri = generationConfigUri,
+      parameterSize = paramSize.ifBlank { "Auto" },
+      quantization = quantization.ifBlank { "F16 / BF16" },
+      defaultSystemPrompt = customPrompt.ifBlank { "Eres un asistente de IA local en Rust." },
+      isUserImported = true
+    )
+
+    _customModels.update { list ->
+      val index = list.indexOfFirst { it.id == modelId }
+      if (index >= 0) {
+        list.toMutableList().apply { set(index, updatedModel) }
+      } else {
+        listOf(updatedModel) + list
+      }
+    }
+    persistModel(updatedModel)
+    return updatedModel
   }
 
   fun addCustomModel(

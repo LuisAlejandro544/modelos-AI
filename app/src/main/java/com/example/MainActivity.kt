@@ -10,13 +10,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.chat.ChatScreen
+import com.example.ui.dialogs.ChatHistoryDialog
 import com.example.ui.dialogs.ImportModelDialog
 import com.example.ui.dialogs.ModelSelectorDialog
 import com.example.ui.dialogs.ParametersDialog
@@ -56,60 +55,91 @@ fun LocalAiApp(viewModel: ChatViewModel) {
       CurrentScreen.WELCOME -> {
         WelcomeScreen(
           selectedModel = state.selectedModel,
+          savedModels = state.customModels,
+          chatSessions = state.chatSessions,
           systemSpecs = state.systemSpecs,
           onSelectGgufFile = { uri, name -> viewModel.loadGgufModelDirect(uri, name) },
-          onOpenSafeTensorsFlow = { viewModel.navigateTo(CurrentScreen.IMPORT_SAFETENSORS) },
-          onStartChatClick = { viewModel.navigateTo(CurrentScreen.CHAT) },
+          onOpenSafeTensorsFlow = { viewModel.openSafeTensorsImport() },
+          onEditSafeTensors = { viewModel.openEditSafeTensors(it) },
+          onSelectSavedModel = {
+            viewModel.selectModel(it)
+            viewModel.startNewChat(it)
+          },
+          onDeleteSavedModel = { viewModel.deleteCustomModel(it) },
+          onOpenChatHistory = { viewModel.showHistoryDialog(true) },
+          onSelectChatSession = { viewModel.openChatSession(it) },
+          onStartChatClick = {
+            if (state.currentSessionId == null) {
+              viewModel.startNewChat(state.selectedModel)
+            } else {
+              viewModel.navigateTo(CurrentScreen.CHAT)
+            }
+          },
           onChangeModelClick = { viewModel.showModelSelector(true) },
           onOpenParametersClick = { viewModel.showParameters(true) },
           onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) }
         )
       }
 
-        CurrentScreen.IMPORT_SAFETENSORS -> {
-          SafeTensorsImportScreen(
-            onStartChat = { name, weights, tokenizer, config, tokConfig, genConfig, paramSize, quant, prompt ->
-              viewModel.importSafeTensorsBundle(
-                modelName = name,
-                weightsUri = weights,
-                tokenizerUri = tokenizer,
-                configUri = config,
-                tokenizerConfigUri = tokConfig,
-                generationConfigUri = genConfig,
-                paramSize = paramSize,
-                quantization = quant,
-                customPrompt = prompt
-              )
-            },
-            onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) },
-            onBackClick = { viewModel.navigateTo(CurrentScreen.WELCOME) }
-          )
-        }
+      CurrentScreen.IMPORT_SAFETENSORS -> {
+        SafeTensorsImportScreen(
+          initialModel = state.editingSafeTensorsModel,
+          onStartChat = { name, weights, tokenizer, config, tokConfig, genConfig, paramSize, quant, prompt ->
+            viewModel.importOrUpdateSafeTensorsBundle(
+              modelName = name,
+              weightsUri = weights,
+              tokenizerUri = tokenizer,
+              configUri = config,
+              tokenizerConfigUri = tokConfig,
+              generationConfigUri = genConfig,
+              paramSize = paramSize,
+              quantization = quant,
+              customPrompt = prompt
+            )
+          },
+          onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) },
+          onBackClick = { viewModel.navigateTo(CurrentScreen.WELCOME) }
+        )
+      }
 
-        CurrentScreen.CHAT -> {
-          ChatScreen(
-            selectedModel = state.selectedModel,
-            parameters = state.parameters,
-            messages = state.messages,
-            isGenerating = state.isGenerating,
-            liveTokensPerSec = state.liveTokensPerSec,
-            liveHardwareInfo = state.liveHardwareInfo,
-            approximateTokens = state.approximateConversationTokens,
-            contextLimit = state.contextLimit,
-            contextPercentage = state.contextUsagePercentage,
-            showClearDialog = state.showClearChatDialog,
-            onSendMessage = { viewModel.sendMessage(it) },
-            onStopGeneration = { viewModel.stopGeneration() },
-            onClearChatRequest = { viewModel.showClearChatConfirm(true) },
-            onClearChatConfirm = { viewModel.clearChat() },
-            onClearChatDismiss = { viewModel.showClearChatConfirm(false) },
-            onOpenModelSelector = { viewModel.showModelSelector(true) },
-            onOpenParameters = { viewModel.showParameters(true) },
-            onBackClick = { viewModel.navigateTo(CurrentScreen.WELCOME) }
-          )
-        }
+      CurrentScreen.CHAT -> {
+        ChatScreen(
+          selectedModel = state.selectedModel,
+          parameters = state.parameters,
+          messages = state.messages,
+          isGenerating = state.isGenerating,
+          liveTokensPerSec = state.liveTokensPerSec,
+          liveHardwareInfo = state.liveHardwareInfo,
+          approximateTokens = state.approximateConversationTokens,
+          contextLimit = state.contextLimit,
+          contextPercentage = state.contextUsagePercentage,
+          showClearDialog = state.showClearChatDialog,
+          onSendMessage = { viewModel.sendMessage(it) },
+          onStopGeneration = { viewModel.stopGeneration() },
+          onClearChatRequest = { viewModel.showClearChatConfirm(true) },
+          onClearChatConfirm = { viewModel.clearChat() },
+          onClearChatDismiss = { viewModel.showClearChatConfirm(false) },
+          onOpenModelSelector = { viewModel.showModelSelector(true) },
+          onOpenParameters = { viewModel.showParameters(true) },
+          onOpenHistory = { viewModel.showHistoryDialog(true) },
+          onBackClick = { viewModel.navigateTo(CurrentScreen.WELCOME) }
+        )
       }
     }
+  }
+
+  // Chat History Dialog
+  if (state.showHistoryDialog) {
+    ChatHistoryDialog(
+      sessions = state.chatSessions,
+      currentSessionId = state.currentSessionId,
+      onSelectSession = { viewModel.openChatSession(it) },
+      onNewChat = { viewModel.startNewChat() },
+      onDeleteSession = { viewModel.deleteChatSession(it) },
+      onRenameSession = { id, newTitle -> viewModel.renameChatSession(id, newTitle) },
+      onDismiss = { viewModel.showHistoryDialog(false) }
+    )
+  }
 
   // Model Selector Dialog
   if (state.showModelSelectorDialog) {
@@ -119,6 +149,10 @@ fun LocalAiApp(viewModel: ChatViewModel) {
       onModelSelected = { viewModel.selectModel(it) },
       onOpenImportDialog = { viewModel.showImportDialog(true) },
       onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) },
+      onEditSafeTensors = {
+        viewModel.showModelSelector(false)
+        viewModel.openEditSafeTensors(it)
+      },
       onDeleteCustomModel = { viewModel.deleteCustomModel(it) },
       onDismiss = { viewModel.showModelSelector(false) }
     )
@@ -154,4 +188,3 @@ fun LocalAiApp(viewModel: ChatViewModel) {
     )
   }
 }
-

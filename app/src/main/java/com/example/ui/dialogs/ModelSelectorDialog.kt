@@ -23,8 +23,10 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
@@ -59,6 +61,7 @@ fun ModelSelectorDialog(
   onModelSelected: (LocalAiModel) -> Unit,
   onOpenImportDialog: () -> Unit,
   onOpenTokenizerGuide: () -> Unit,
+  onEditSafeTensors: (LocalAiModel) -> Unit,
   onDeleteCustomModel: (String) -> Unit,
   onDismiss: () -> Unit
 ) {
@@ -103,13 +106,13 @@ fun ModelSelectorDialog(
             Spacer(modifier = Modifier.width(12.dp))
             Column {
               Text(
-                text = "Modelos Locales",
+                text = "Modelos Guardados",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "Inferencia 100% offline y archivos propios",
+                text = "Tus archivos locales y configuraciones",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -224,6 +227,9 @@ fun ModelSelectorDialog(
                 model = model,
                 isSelected = model.id == selectedModel?.id,
                 onClick = { onModelSelected(model) },
+                onEdit = if (model.formatType == ModelFormatType.SAFETENSORS) {
+                  { onEditSafeTensors(model) }
+                } else null,
                 onDelete = { onDeleteCustomModel(model.id) }
               )
             }
@@ -239,6 +245,7 @@ private fun ModelCardItem(
   model: LocalAiModel,
   isSelected: Boolean,
   onClick: () -> Unit,
+  onEdit: (() -> Unit)?,
   onDelete: (() -> Unit)?
 ) {
   val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
@@ -286,7 +293,7 @@ private fun ModelCardItem(
                   .padding(horizontal = 5.dp, vertical = 2.dp)
               ) {
                 Text(
-                  text = "PROPIO",
+                  text = "GUARDADO",
                   style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.tertiary,
                   fontWeight = FontWeight.Bold,
@@ -304,6 +311,21 @@ private fun ModelCardItem(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+          if (onEdit != null) {
+            IconButton(
+              onClick = onEdit,
+              modifier = Modifier.size(32.dp).testTag("edit_model_dialog_${model.id}")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = "Editar",
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(17.dp)
+              )
+            }
+            Spacer(modifier = Modifier.width(2.dp))
+          }
+
           if (onDelete != null) {
             IconButton(
               onClick = onDelete,

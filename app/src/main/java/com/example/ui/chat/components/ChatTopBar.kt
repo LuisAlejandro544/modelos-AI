@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Tune
@@ -43,6 +44,7 @@ fun ChatTopBar(
   onBackClick: () -> Unit,
   onOpenModelSelector: () -> Unit,
   onOpenParameters: () -> Unit,
+  onOpenHistory: () -> Unit,
   onClearChatRequest: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -108,6 +110,18 @@ fun ChatTopBar(
       }
     },
     actions = {
+      // Chat History Button
+      IconButton(
+        onClick = onOpenHistory,
+        modifier = Modifier.testTag("chat_history_button")
+      ) {
+        Icon(
+          imageVector = Icons.Default.Forum,
+          contentDescription = "Historial de conversaciones",
+          tint = MaterialTheme.colorScheme.onSurface
+        )
+      }
+
       // Parameters Button
       IconButton(
         onClick = onOpenParameters,

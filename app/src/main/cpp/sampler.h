@@ -67,22 +67,42 @@ public:
             return static_cast<int32_t>(std::distance(logits.begin(), maxIt));
         }
 
-        // 3. Scale by Temperature
-        const float invTemp = 1.0f / params.temperature;
+        // 3. Scale by Temperature with NaN/Inf protection
+        const float safeTemp = std::max(params.temperature, 0.01f);
+        const float invTemp = 1.0f / safeTemp;
         for (float& val : logits) {
-            val *= invTemp;
+            if (std::isnan(val) || std::isinf(val)) {
+                val = -100.0f;
+            } else {
+                val *= invTemp;
+            }
         }
 
-        // 4. Softmax
+        // 4. Softmax with numerical stabilization
         float maxLogit = *std::max_element(logits.begin(), logits.end());
+        if (std::isnan(maxLogit) || std::isinf(maxLogit)) {
+            maxLogit = 0.0f;
+        }
+
         float sumExp = 0.0f;
         std::vector<float> probs(logits.size());
         for (size_t i = 0; i < logits.size(); ++i) {
-            probs[i] = std::exp(logits[i] - maxLogit);
-            sumExp += probs[i];
+            float diff = logits[i] - maxLogit;
+            // Clamp exp range to prevent overflow / underflow
+            if (diff < -50.0f) diff = -50.0f;
+            if (diff > 50.0f) diff = 50.0f;
+            float expVal = std::exp(diff);
+            probs[i] = expVal;
+            sumExp += expVal;
         }
-        for (float& p : probs) {
-            p /= sumExp;
+
+        if (sumExp <= 0.0f || std::isnan(sumExp) || std::isinf(sumExp)) {
+            sumExp = 1.0f;
+            for (float& p : probs) p = 1.0f / static_cast<float>(probs.size());
+        } else {
+            for (float& p : probs) {
+                p /= sumExp;
+            }
         }
 
         // 5. Top-K and Top-P filtering
@@ -94,10 +114,18 @@ public:
         std::vector<TokenProb> candidates;
         candidates.reserve(probs.size());
         for (size_t i = 0; i < probs.size(); ++i) {
-            candidates.push_back({static_cast<int32_t>(i), probs[i]});
+            float pr = probs[i];
+            if (!std::isnan(pr) && pr > 0.0f) {
+                candidates.push_back({static_cast<int32_t>(i), pr});
+            }
+        }
+
+        if (candidates.empty()) {
+            return 0;
         }
 
         std::sort(candidates.begin(), candidates.end(), [](const TokenProb& a, const TokenProb& b) {
+            if (std::isnan(a.prob) || std::isnan(b.prob)) return false;
             return a.prob > b.prob;
         });
 
@@ -123,7 +151,7 @@ public:
         for (const auto& c : candidates) {
             filteredSum += c.prob;
         }
-        if (filteredSum <= 0.0f) {
+        if (filteredSum <= 0.0f || std::isnan(filteredSum) || std::isinf(filteredSum)) {
             return candidates.front().id;
         }
 

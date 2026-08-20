@@ -33,18 +33,18 @@ public:
         m_basePtr = basePtr;
 
         m_dim = metadata.embeddingLength > 0 ? metadata.embeddingLength : 2048;
-        m_nLayers = metadata.blockCount > 0 ? metadata.blockCount : 16;
+        m_nLayers = metadata.blockCount > 0 ? std::min(metadata.blockCount, uint64_t(64)) : 16;
         m_nHeads = metadata.headCount > 0 ? metadata.headCount : 16;
         m_nKvHeads = metadata.headCountKv > 0 ? metadata.headCountKv : m_nHeads;
-        m_headDim = m_dim / m_nHeads;
-        m_vocabSize = metadata.vocabSize > 0 ? metadata.vocabSize : 32000;
+        m_headDim = m_nHeads > 0 ? std::max(uint64_t(1), m_dim / m_nHeads) : 128;
+        m_vocabSize = metadata.vocabSize > 0 ? std::min(metadata.vocabSize, uint64_t(320000)) : 32000;
 
         // Initialize KV cache buffers
         m_kCache.resize(m_nLayers);
         m_vCache.resize(m_nLayers);
         for (uint64_t l = 0; l < m_nLayers; ++l) {
-            m_kCache[l].resize(m_maxSeqLen * m_nKvHeads * m_headDim, 0.0f);
-            m_vCache[l].resize(m_maxSeqLen * m_nKvHeads * m_headDim, 0.0f);
+            m_kCache[l].assign(m_maxSeqLen * m_nKvHeads * m_headDim, 0.0f);
+            m_vCache[l].assign(m_maxSeqLen * m_nKvHeads * m_headDim, 0.0f);
         }
     }
 

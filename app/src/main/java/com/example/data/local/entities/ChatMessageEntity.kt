@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.model.ChatMessage
 import com.example.model.ChatRole
+import com.example.model.InferenceMetrics
 
 @Entity(tableName = "chat_messages")
 data class ChatMessageEntity(
@@ -19,11 +20,26 @@ data class ChatMessageEntity(
   val ramUsageMb: Int? = null,
   val hardwareUsed: String? = null
 ) {
-  fun toDomainModel(): ChatMessage {
+  fun toDomainModel(modelName: String = "Modelo Local"): ChatMessage {
     val domainRole = when (role.uppercase()) {
       "USER" -> ChatRole.USER
       "ASSISTANT" -> ChatRole.ASSISTANT
       else -> ChatRole.SYSTEM
+    }
+
+    val metrics = if (tokensPerSecond != null || tokenCount != null || generationTimeMs != null) {
+      InferenceMetrics(
+        modelName = modelName,
+        backendName = "Motor Local",
+        hardwareUsed = hardwareUsed ?: "GPU (Vulkan)",
+        tokensGenerated = tokenCount ?: 0,
+        generationTimeMs = generationTimeMs ?: 0L,
+        tokensPerSecond = tokensPerSecond ?: 0.0,
+        ramUsageMb = ramUsageMb ?: 0,
+        temperature = 0.7f
+      )
+    } else {
+      null
     }
 
     return ChatMessage(
@@ -31,7 +47,7 @@ data class ChatMessageEntity(
       role = domainRole,
       content = content,
       timestamp = timestamp,
-      metrics = null,
+      metrics = metrics,
       isStreaming = false,
       liveTokensPerSec = tokensPerSecond,
       liveHardwareInfo = hardwareUsed

@@ -26,15 +26,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. Instalar herramientas de compilación C++ nativas del sistema (Ninja, CCache, Clang)
-      - name: Instalar dependencias C++ del sistema (Ninja, CCache, Clang)
+      # 3. Instalar herramientas de compilación C++ nativas del sistema (Ninja, CCache, Clang, 7-Zip)
+      - name: Instalar dependencias C++ del sistema (Ninja, CCache, Clang, 7-Zip)
         run: |
-          echo "=== Instalando herramientas de compilación C++ nativas para Linux/Android ==="
+          echo "=== Instalando herramientas de compilación C++ nativas y 7-Zip para Linux/Android ==="
           sudo apt-get update
-          sudo apt-get install -y ninja-build ccache clang llvm lld pkg-config build-essential
+          sudo apt-get install -y ninja-build ccache clang llvm lld pkg-config build-essential p7zip-full
           echo "Ninja: $(ninja --version)"
           echo "CCache: $(ccache --version | head -n 1)"
           echo "Clang: $(clang --version | head -n 1)"
+          echo "7-Zip: $(7z | head -n 2 | tail -n 1)"
 
       # 4. Configurar Android SDK, NDK y CMake para C++ (llama.cpp / GGUF)
       - name: Configurar Android NDK y CMake para C++
@@ -188,8 +189,41 @@ jobs:
             gradle assembleDebug $GRADLE_FLAGS
           fi
 
-      # 14. Subir el APK como artefacto descargable en GitHub Actions
-      - name: Subir APK Debug como Artefacto
+      # 14. Comprimir el APK con 7-Zip Ultra (LZMA2 / -mx=9 / Solid) para descarga rápida en conexiones móviles
+      - name: Comprimir APK con 7-Zip (Ultra LZMA2)
+        run: |
+          echo "=== Comprimiendo APK Debug con 7-Zip (LZMA2 Ultra) ==="
+          mkdir -p dist_7z
+          APK_FILE=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No se encontró el archivo APK generado en app/build/outputs/apk/debug"
+            exit 1
+          fi
+          
+          echo "Archivo APK original:"
+          ls -lh "$APK_FILE"
+          
+          # Compresión sólida con nivel 9 (Ultra), diccionario de 64MB y algoritmo LZMA2
+          7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=64m -ms=on dist_7z/AI-Local-Debug-APK.7z "$APK_FILE"
+          
+          echo "Archivo 7z Ultra comprimido generado:"
+          ls -lh dist_7z/AI-Local-Debug-APK.7z
+          
+          ORIGINAL_SIZE=$(stat -c%s "$APK_FILE" 2>/dev/null || stat -f%z "$APK_FILE")
+          COMPRESSED_SIZE=$(stat -c%s dist_7z/AI-Local-Debug-APK.7z 2>/dev/null || stat -f%z dist_7z/AI-Local-Debug-APK.7z)
+          REDUCTION=$(( (ORIGINAL_SIZE - COMPRESSED_SIZE) * 100 / ORIGINAL_SIZE ))
+          echo "Reducción de tamaño: $REDUCTION% (Original: $ORIGINAL_SIZE bytes -> Comprimido: $COMPRESSED_SIZE bytes)"
+
+      # 15. Subir el APK ultra-comprimido (.7z) como artefacto descargable en GitHub Actions
+      - name: Subir APK Debug Ultra Comprimido (.7z) como Artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Local-Debug-APK-7z
+          path: dist_7z/AI-Local-Debug-APK.7z
+          retention-days: 14
+
+      # 16. Subir también el APK directo para compatibilidad estándar
+      - name: Subir APK Debug directo como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: AI-Local-Debug-APK

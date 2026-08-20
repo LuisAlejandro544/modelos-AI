@@ -61,6 +61,7 @@ fun ChatScreen(
   onClearChatDismiss: () -> Unit,
   onOpenModelSelector: () -> Unit,
   onOpenParameters: () -> Unit,
+  onOpenHistory: () -> Unit,
   onBackClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -94,6 +95,7 @@ fun ChatScreen(
           onBackClick = onBackClick,
           onOpenModelSelector = onOpenModelSelector,
           onOpenParameters = onOpenParameters,
+          onOpenHistory = onOpenHistory,
           onClearChatRequest = onClearChatRequest
         )
 

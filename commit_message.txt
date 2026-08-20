@@ -1,27 +1,42 @@
-feat(tflite): preparar terreno con dependencias tflite e integracion inicial de formato
+feat(ci, compression): optimización de descarga de APK mediante compresión 7-Zip Ultra LZMA2
 
-- Configuración de Dependencias (`gradle/libs.versions.toml` y `app/build.gradle.kts`):
-  * Adición de las librerías oficiales de TensorFlow Lite: `tensorflow-lite` (2.16.1), `tensorflow-lite-gpu` (2.16.1) y `tensorflow-lite-support` (0.4.4).
-  * Preparación del entorno de compilación para soporte de aceleradores móviles (GPU Delegate y NNAPI Delegate).
+- Optimización de Empaquetado y Descarga Móvil en CI/CD (`.github/workflows/build-apk.yml`):
+  * Integrada herramienta `p7zip-full` en el entorno de compilación de GitHub Actions.
+  * Añadido paso de empaquetado con 7-Zip en nivel Ultra (`-t7z -m0=lzma2 -mx=9 -mfb=64 -md=64m -ms=on`) que reduce drásticamente el tamaño de descarga del APK para conexiones móviles lentas.
+  * Generación y subida del artefacto ultra-comprimido `AI-Local-Debug-APK-7z` (`dist_7z/AI-Local-Debug-APK.7z`) listo para descomprimir e instalar con ZArchiver/RAR en Android.
+  * Mantenido el artefacto estándar `AI-Local-Debug-APK` para máxima compatibilidad.
 
-- Modelo de Datos y Enums (`app/src/main/java/com/example/model/`):
-  * Incorporación de `ModelFormatType.TFLITE` (`.tflite`) con descripción técnica clara sobre tensores FlatBuffers y tokenizadores complementarios.
-  * Añadido `InferenceBackend.TFLITE_RUNTIME` ("TensorFlow Lite / LiteRT") con soporte de GPU (OpenCL/OpenGL) y NNAPI NPU.
+- Administrador e Historial de Conversaciones (`ChatRepository.kt`, `ChatDao.kt`, `ChatHistoryDialog.kt`):
+  * Creada persistencia completa de sesiones (`ChatSessionEntity`) y mensajes (`ChatMessageEntity`) en la base de datos local SQLite/Room.
+  * Almacenamiento de metadatos de conversación: modelo vinculado, fecha de creación/actualización, recuento de mensajes y fragmento previo.
+  * Guardado automático y persistente de cada mensaje del usuario y respuesta generada por el asistente (junto a sus métricas de velocidad en tok/s, hardware y latencia).
+  * Diálogo modal interactivo para consultar el historial de chats, iniciar una nueva conversación (`+ Nueva Conversación`), alternar entre chats guardados, renombrar títulos y eliminar sesiones.
 
-- Persistencia Local (`ModelEntity.kt`):
-  * Soporte bidireccional para el formato `"TFLITE"` en la capa de persistencia Room.
+- Inicio Automático de Chat desde Cero (`ChatViewModel.kt`, `WelcomeScreen.kt`):
+  * Al importar o cargar cualquier modelo nuevo (.gguf o .safetensors), se inicializa automáticamente una sesión limpia desde 0 con su ID único, dejando la lista de mensajes vacía y lista para interactuar.
+  * Sección de "Conversaciones Recientes" en la pantalla de bienvenida para acceder o reanudar chats pasados en un toque.
+  * Botón de acceso directo al historial integrado en `ChatTopBar` y en la cabecera de `WelcomeScreen`.
 
-- Interfaz de Usuario y Diálogos (`app/src/main/java/com/example/ui/dialogs/`):
-  * `ImportModelDialog.kt`: Selector de formato TFLite, detección automática de archivos `.tflite` y `.task`, y campos para archivos opcionales de tokenizador (`tokenizer.json` / `tokenizer.model` / `vocab.txt`) y configuración (`config.json`).
-  * `TokenizerGuideDialog.kt`: Actualizada la guía visual explicativa con la comparativa GGUF vs SafeTensors vs TensorFlow Lite.
-  * `ParametersDialog.kt`: Selección y restauración adaptativa del backend TFLite Runtime.
+- Rediseño de Interfaz y Eliminación de Recursos Obsoletos (`WelcomeScreen.kt`, `ModelSelectorDialog.kt`):
+  * Eliminada la imagen banner estática y reemplazada por una cabecera Material Design 3 limpia, profesional y moderna centrada en el "Motor Neural Local".
+  * Integrada sección de "Modelos Guardados" en la pantalla de bienvenida, permitiendo reanudar conversaciones, ver especificaciones y gestionar modelos importados al instante.
 
-- ViewModel y Motor de Inferencia (`ChatViewModel.kt`, `LocalInferenceEngine.kt`):
-  * Asignación automática de backend TFLite al importar o seleccionar modelos `.tflite`.
-  * Respuestas y documentación integrada sobre compatibilidad con FlatBuffers y delegados móviles.
+- Telemetría Real de Hardware Móvil (`HardwareCapabilityDetector.kt`):
+  * Detección dinámica y en tiempo real del modelo y fabricante del dispositivo (`Build.MANUFACTURER`, `Build.MODEL`).
+  * Detección precisa de SoC / Chipset (Snapdragon, Dimensity, Tensor, Exynos) y ABI nativa (`arm64-v8a`).
+  * Monitoreo en vivo de memoria RAM real mediante `ActivityManager.MemoryInfo` (RAM libre / RAM total en GB y detección de presión de memoria).
+  * Lectura de almacenamiento disponible en almacenamiento interno mediante `StatFs` para carga de modelos de gran tamaño.
+  * Detección de soporte de aceleración NPU, GPU Vulkan y juego de instrucciones ARM NEON multihilo.
 
-- Pruebas Unitarias (`app/src/test/java/com/example/ExampleUnitTest.kt`):
-  * Prueba unitaria `testTFLiteModel_EntityAndFormatMapping` verificando el mapeo de entidad y propiedades del formato TFLite.
+- Persistencia y Gestión Completa de Modelos (`ModelRepository.kt`, `LocalAiDatabase.kt`, `ModelDao.kt`):
+  * Persistencia automática de todo modelo importado (.gguf y .safetensors) en la base de datos local Room.
+  * Mantenimiento de la biblioteca de modelos accesibles desde la pantalla de bienvenida y el diálogo de selección.
 
-- Documentación Técnica (`README.md`, `AI_CONTEXT.md`, `ROADMAP.md`, `STRUCTURE.md`):
-  * Actualización integral de la documentación del proyecto reflejando la preparación del ecosistema TensorFlow Lite.
+- Soporte para Modificación / Edición de Modelos SafeTensors (`SafeTensorsImportScreen.kt`, `ChatViewModel.kt`):
+  * Posibilidad de editar configuraciones existentes de SafeTensors para añadir o reemplazar archivos faltantes (`tokenizer.json`, `config.json`, `tokenizer_config.json`, `generation_config.json`, pesos `.safetensors` o prompts de sistema).
+  * Flujo bidireccional de actualización en Room preservando el ID y actualizando los metadatos y rutas del modelo.
+
+- Registro Previo de Estabilidad de Inferencia C++ GGUF:
+  * Motor de Streaming y Acumulador UTF-8 (`streaming_engine.cpp`, `utf8_util.h`) para Modified-UTF-8 válido en JNI.
+  * Manejo de excepciones JNI pendientes y liberación de referencias locales en bucle de inferencia.
+  * Estabilización numérica del muestreador Softmax/Top-K/Top-P en `sampler.h` y control de límites KV-cache en `transformer_forward.h`.

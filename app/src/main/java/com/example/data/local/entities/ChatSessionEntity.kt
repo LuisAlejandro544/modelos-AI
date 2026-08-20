@@ -9,7 +9,10 @@ data class ChatSessionEntity(
   val id: String,
   val title: String,
   val modelId: String,
+  val modelName: String = "",
   val systemPrompt: String? = null,
+  val messageCount: Int = 0,
+  val lastSnippet: String = "",
   val createdAt: Long = System.currentTimeMillis(),
   val updatedAt: Long = System.currentTimeMillis()
 )

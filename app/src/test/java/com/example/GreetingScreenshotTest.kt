@@ -27,9 +27,16 @@ class GreetingScreenshotTest {
       MyApplicationTheme {
         WelcomeScreen(
           selectedModel = null,
+          savedModels = emptyList(),
+          chatSessions = emptyList(),
           systemSpecs = SystemSpecs(),
           onSelectGgufFile = { _, _ -> },
           onOpenSafeTensorsFlow = {},
+          onEditSafeTensors = {},
+          onSelectSavedModel = {},
+          onDeleteSavedModel = {},
+          onOpenChatHistory = {},
+          onSelectChatSession = {},
           onStartChatClick = {},
           onChangeModelClick = {},
           onOpenParametersClick = {},

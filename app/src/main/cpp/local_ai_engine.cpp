@@ -9,6 +9,7 @@
 #include "bpe_tokenizer.h"
 #include "context_manager.h"
 #include "streaming_engine.h"
+#include "utf8_util.h"
 
 #define LOG_TAG "LocalAICppEngine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -165,7 +166,8 @@ Java_com_example_engine_NativeCppBridge_decodeTokensNative(
         }
     }
 
-    return env->NewStringUTF(decodedText.c_str());
+    std::string safeText = Utf8Util::safeUtf8(decodedText);
+    return env->NewStringUTF(safeText.c_str());
 }
 
 /**
@@ -187,7 +189,8 @@ Java_com_example_engine_NativeCppBridge_decodeTokenNative(
         piece = std::string(1, static_cast<char>(token_id));
     }
 
-    return env->NewStringUTF(piece.c_str());
+    std::string safePiece = Utf8Util::safeUtf8(piece);
+    return env->NewStringUTF(safePiece.c_str());
 }
 
 /**
@@ -229,7 +232,8 @@ Java_com_example_engine_NativeCppBridge_evaluatePromptNative(
     GgufExecutionContext* ctx = ContextManager::getContext(context_handle);
     std::string response = StreamingEngine::evaluatePrompt(ctx, promptStr, temperature, top_p, max_tokens);
 
-    return env->NewStringUTF(response.c_str());
+    std::string safeResp = Utf8Util::safeUtf8(response);
+    return env->NewStringUTF(safeResp.c_str());
 }
 
 /**
@@ -256,7 +260,8 @@ Java_com_example_engine_NativeCppBridge_generateStreamingPromptNative(
         env, ctx, promptStr, temperature, top_p, repeat_penalty, max_tokens, callback
     );
 
-    return env->NewStringUTF(response.c_str());
+    std::string safeResp = Utf8Util::safeUtf8(response);
+    return env->NewStringUTF(safeResp.c_str());
 }
 
 /**
