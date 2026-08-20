@@ -8,10 +8,11 @@ Aplicación nativa para Android desarrollada con **Kotlin**, **Jetpack Compose (
 
 La aplicación cuenta con dos modos principales para cargar modelos almacenados en el teléfono:
 
-1. ⚡ **Modo GGUF (`.gguf`):**
+1. ⚡ **Modo GGUF (`.gguf` - Motor Nativo C++ llama.cpp):**
    - Carga directa con 1 solo archivo autocontenido.
-   - Utiliza el motor C++ (`llama.cpp`) con aceleración por GPU (Vulkan) y mapeo flash `mmap`.
-   - Selecciona el archivo `.gguf` desde el almacenamiento y la conversación se inicia de inmediato.
+   - **Parser Binario Nativo GGUF (v2 y v3):** Lectura e inspección en milisegundos de metadatos de cabecera (`0x46554747`), arquitectura (`llama`, `qwen2`, `gemma2`, `phi3`), longitud de contexto, capas de atención y plantillas de chat sin consumir memoria RAM.
+   - **Mapeo Flash `mmap` Zero-Copy con File Descriptors (`ParcelFileDescriptor`):** Conexión directa mediante descriptores de archivo del sistema (`content://...`) permitiendo paginación de tensores bajo demanda desde el almacenamiento flash.
+   - Soporte multihilo optimizado para arquitecturas ARM64 (`arm64-v8a`), ARMv7 (`armeabi-v7a`) y x86_64 con aceleración vectorial NEON y Vulkan GPU.
 
 2. 🧩 **Modo SafeTensors (`.safetensors` con Inferencia Real Hugging Face Candle):**
    - Carga modular en el motor nativo de Rust (**Candle 0.8.2**).
@@ -56,10 +57,10 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
                                             ▼                                ▼
                               ┌───────────────────────────┐    ┌───────────────────────────┐
                               │   C++ Engine (llama.cpp)  │    │    Rust Engine (Candle)   │
-                              │  • Vulkan / GPU / NEON    │    │  • SafeTensors Real Forward│
-                              │  • mmap Flash Mapping     │    │  • RMSNorm & LM Head MatMul│
-                              │  • Carga 1-click GGUF     │    │  • BPE Tokenizers Native  │
-                              │                           │    │  • Zero-Copy Memory Map   │
+                              │  • GGUF v2/v3 Parser      │    │  • SafeTensors Real Forward│
+                              │  • Vulkan / GPU / NEON    │    │  • RMSNorm & LM Head MatMul│
+                              │  • mmap Flash Mapping     │    │  • BPE Tokenizers Native  │
+                              │  • Carga 1-click GGUF     │    │  • Zero-Copy Memory Map   │
                               └───────────────────────────┘    └───────────────────────────┘
 ```
 
@@ -82,4 +83,4 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
 
 - Preparado para distribución universal mediante **APK firmado** en tiendas de terceros como Uptodown, F-Droid o GitHub Releases.
 - No requiere Google Play Services ni permisos invasivos de red.
-- Flujo CI/CD automatizado con GitHub Actions en `.github/workflows/build-apk.yml` con soporte de caché acelerado para Rust (`rust-cache@v2`) y Gradle.
+- Flujo CI/CD automatizado con GitHub Actions en `.github/workflows/build-apk.yml` con soporte de caché acelerado para Rust (`rust-cache@v2`), C++ CMake y Gradle.

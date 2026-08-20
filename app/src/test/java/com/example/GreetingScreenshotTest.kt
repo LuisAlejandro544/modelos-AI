@@ -2,7 +2,6 @@ package com.example
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
-import com.example.model.LocalModelsRepository
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.welcome.WelcomeScreen
 import com.example.viewmodel.SystemSpecs
@@ -27,11 +26,14 @@ class GreetingScreenshotTest {
     composeTestRule.setContent {
       MyApplicationTheme {
         WelcomeScreen(
-          selectedModel = LocalModelsRepository.defaultModel,
+          selectedModel = null,
           systemSpecs = SystemSpecs(),
+          onSelectGgufFile = { _, _ -> },
+          onOpenSafeTensorsFlow = {},
           onStartChatClick = {},
           onChangeModelClick = {},
-          onOpenParametersClick = {}
+          onOpenParametersClick = {},
+          onOpenTokenizerGuide = {}
         )
       }
     }

@@ -2,6 +2,7 @@ package com.example.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.App
 import com.example.data.repository.ModelRepository
 import com.example.engine.LocalInferenceEngine
 import com.example.model.ChatMessage
@@ -99,7 +100,7 @@ class ChatViewModel(
   }
 
   fun loadGgufModelDirect(uriOrPath: String, displayName: String? = null) {
-    val newModel = repository.addGgufModel(uriOrPath, displayName)
+    val newModel = repository.addGgufModel(uriOrPath, displayName, App.instance?.applicationContext)
     _uiState.update {
       it.copy(
         selectedModel = newModel,

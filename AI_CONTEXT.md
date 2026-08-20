@@ -7,9 +7,11 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
 
 ## ⚡ Modos de Operación
 
-1. **Modo GGUF (`.gguf`):**
+1. **Modo GGUF (`.gguf` - Motor Nativo C++ llama.cpp):**
    - Selección de un único archivo `.gguf` que contiene pesos, vocabulario y metadatos de arquitectura en un solo binario.
-   - Enrutado al motor nativo C++ (`llama.cpp`) con soporte para GPU Vulkan y `mmap`.
+   - **Parser de Cabeceras GGUF v2/v3 en C++:** Decodificación zero-copy de número mágico `0x46554747`, tensores, kv-metadata y plantillas de chat.
+   - **Gestión Nativa de Memoria (`mmap`):** Mapeo virtual del modelo desde descriptores de archivo Android (`ParcelFileDescriptor`) sin duplicación en RAM de la JVM.
+   - Soporte multihilo para arquitecturas ARM64 con aceleración NEON y Vulkan GPU.
 
 2. **Modo SafeTensors (`.safetensors` - Inferencia Real con Hugging Face Candle):**
    - Pantalla dedicada para seleccionar por separado los 4 archivos obligatorios:
@@ -46,7 +48,7 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
 - **Lenguaje:** Kotlin (Coroutines y Flow).
 - **UI:** Jetpack Compose con Material Design 3 (M3).
 - **Patrón:** MVVM con `StateFlow` y `collectAsStateWithLifecycle`.
-- **C++ NDK:** `local_ai_engine.cpp` para `llama.cpp`.
+- **C++ NDK:** `local_ai_engine.cpp`, `gguf_parser.cpp`, `gguf_types.h` para `llama.cpp` y GGUF v2/v3.
 - **Rust NDK:** `local_ai_rust` (`Candle 0.8.2` con `safetensors`, `tokenizers` y `memmap2`).
-- **CI/CD:** GitHub Actions con caché para Rust (`rust-cache@v2`), `cargo-ndk` y Gradle.
+- **CI/CD:** GitHub Actions con soporte multi-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
 - **Testing:** Robolectric para tests locales en JVM y Roborazzi para capturas.

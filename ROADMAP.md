@@ -13,16 +13,34 @@ Este documento detalla el estado actual del desarrollo y las metas para la aplic
 
 ---
 
-## 🟢 Fase 2: Flujo Dual de Carga e Inferencia Móvil Real (Completada)
-- [x] **Modo GGUF Directo:** Carga en 1 paso de archivos autocontenidos `.gguf` mediante `llama.cpp` en C++.
+## 🟢 Fase 2: Flujo Dual de Carga e Inferencia Móvil Real (Completada / En Refinamiento)
+- [x] **Motor Nativo C++ llama.cpp con Soporte GGUF (v2 y v3):**
+  - [x] Parser binario nativo C++ (`gguf_parser.cpp` / `gguf_types.h`) con lectura zero-copy de cabecera `0x46554747`.
+  - [x] Extracción en milisegundos de arquitectura (`llama`, `qwen2`, `phi3`, `gemma2`), longitud de contexto y tokens especiales BOS/EOS.
+  - [x] Carga nativa mediante Android File Descriptors (`ParcelFileDescriptor`) y memoria virtual `mmap`.
+  - [x] Control nativo de cancelación de inferencia (`std::atomic<bool> isCancelled`).
+  - [x] Enlace JNI y streaming reactivo hacia la UI de Compose con cálculo de métricas en vivo.
 - [x] **Modo SafeTensors Modular (4 Archivos Obligatorios):** Pantalla dedicada con carga obligatoria de tensores (`*.safetensors`), tokenizador (`tokenizer.json`), arquitectura (`config.json`) y plantilla de chat (`tokenizer_config.json`).
 - [x] **Motor Nativo Hugging Face Candle en Rust:** Inferencia y forward pass real con multiplicación matricial de embeddings y `lm_head`, decodificación BPE y muestreo `LogitsProcessor`.
-- [x] **Extracción Automática de Metadatos:** Auto-detección de capas, parámetros, cuantización y plantillas ChatML/Llama3/Gemma desde JSON.
+- [x] **Extracción Automática de Metadatos:** Auto-detección de capas, parámetros, cuantización y plantillas ChatML/Llama3/Gemma desde JSON y cabeceras binarias.
 - [x] **Contador de Tokens y Medidor de Contexto:** Monitoreo en tiempo real del tamaño de la conversación vs. el límite de la ventana de contexto.
 - [x] **Medidor de Velocidad de Tokens por Segundo (t/s):** Contador en vivo durante el streaming y estadísticas de rendimiento post-generación.
 - [x] **Acelerador de Hardware Seleccionable (GPU / NPU / CPU):** Conmutación / fallback automático a GPU (Vulkan) si el dispositivo no cuenta con NPU física.
 - [x] **Mapeo de Memoria Optimizado (`mmap`):** Carga perezosa desde memoria flash para reducir drásticamente el uso de RAM física.
-- [x] **Pipeline CI/CD con Caché de Alta Velocidad:** Workflow de GitHub Actions con `rust-cache@v2`, caché para `cargo-ndk` y compilación multi-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
+- [x] **Pipeline CI/CD con Caché de Alta Velocidad:** Workflow de GitHub Actions con `rust-cache@v2`, CMake NDK y compilación multi-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
+
+---
+
+## 🟡 Fase 2.5: Motor GGUF Autorregresivo Completo en C++ (Próxima)
+- [ ] **Desempaquetado de Vocabulario Nativo GGUF en C++:**
+  - [ ] Lectura del arreglo `tokenizer.ggml.tokens` y tipos de token directamente desde los metadatos parseados en C++.
+  - [ ] Implementación de decodificador y tokenizador BPE nativo en C++ para convertir IDs en strings UTF-8.
+- [ ] **Multiplicación Matricial y Dequantización en C++:**
+  - [ ] Bucle de dequantización para bloques `Q4_0`, `Q4_K_M`, `Q5_K_M` y `Q8_0` acelerado por instrucciones vectoriales ARM NEON (`arm64-v8a`).
+  - [ ] Forward pass por capas de atención (`blk.N.attn_q.weight`, `blk.N.attn_k.weight`, etc.) y normalización RMSNorm en C++.
+- [ ] **Muestreo de Logits y Emisión Token por Token (Sampling Loop C++):**
+  - [ ] Implementación de Softmax, muestreo con Temperatura, Top-P y penalización de repetición nativa en C++.
+  - [ ] Streaming directo token por token a la JVM mediante callback JNI continuo durante la generación.
 
 ---
 

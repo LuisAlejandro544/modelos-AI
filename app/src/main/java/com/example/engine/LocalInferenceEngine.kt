@@ -1,5 +1,9 @@
 package com.example.engine
 
+import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.util.Log
+import com.example.App
 import com.example.engine.formatter.ChatTemplateFormatter
 import com.example.engine.hardware.HardwareCapabilityDetector
 import com.example.engine.metrics.InferenceMetricsTracker
@@ -27,6 +31,10 @@ class LocalInferenceEngine(
   private val cppBridge: NativeCppBridge = NativeCppBridge,
   private val rustBridge: RustInferenceBridge = RustInferenceBridge
 ) {
+
+  companion object {
+    private const val TAG = "LocalInferenceEngine"
+  }
 
   fun generateResponseStream(
     userPrompt: String,
@@ -61,14 +69,15 @@ class LocalInferenceEngine(
     // Base tokens per second calculation
     val baseTps = calculateBaseTps(parameters, model, deviceHasNpu)
 
-    // Attempt real execution via Rust Candle for SafeTensors if native library loaded and files present
+    // Attempt real execution via Rust Candle for SafeTensors or C++ llama.cpp for GGUF
     var realOutput: String? = null
+
     if (isSafeTensors && rustBridge.isRustLoaded && !model.filePathOrUri.isNullOrBlank() && !model.tokenizerPathOrUri.isNullOrBlank()) {
       val rawResult = rustBridge.evaluateSafeTensorsSafe(
-        weightsPath = model.filePathOrUri,
-        tokenizerPath = model.tokenizerPathOrUri,
-        configPath = model.configPathOrUri ?: "",
-        tokenizerConfigPath = model.tokenizerConfigPathOrUri ?: "",
+        weightsPathOrUri = model.filePathOrUri,
+        tokenizerPathOrUri = model.tokenizerPathOrUri,
+        configPathOrUri = model.configPathOrUri ?: "",
+        tokenizerConfigPathOrUri = model.tokenizerConfigPathOrUri ?: "",
         prompt = formattedPrompt,
         temperature = parameters.temperature,
         topP = parameters.topP,
@@ -77,6 +86,54 @@ class LocalInferenceEngine(
       )
       if (rawResult.isNotBlank()) {
         realOutput = rawResult
+      }
+    } else if (!isSafeTensors && cppBridge.isNativeLoaded && !model.filePathOrUri.isNullOrBlank()) {
+      val filePath = model.filePathOrUri
+      val ctx = App.instance?.applicationContext
+      var handle: Long = 0
+      var pfd: ParcelFileDescriptor? = null
+      try {
+        if (filePath.startsWith("content://") && ctx != null) {
+          pfd = ctx.contentResolver.openFileDescriptor(Uri.parse(filePath), "r")
+          if (pfd != null) {
+            handle = cppBridge.initGgufModelFromFd(
+              fd = pfd.fd,
+              nThreads = parameters.cpuThreads,
+              contextSize = parameters.contextWindow,
+              useMmap = parameters.useMmap
+            )
+          }
+        } else {
+          handle = cppBridge.initModelContextNative(
+            modelPath = filePath,
+            nThreads = parameters.cpuThreads,
+            contextSize = parameters.contextWindow
+          )
+        }
+
+        if (handle != 0L) {
+          val rawResult = cppBridge.evaluatePromptNative(
+            contextHandle = handle,
+            prompt = formattedPrompt,
+            temperature = parameters.temperature,
+            topP = parameters.topP,
+            maxTokens = parameters.maxTokens
+          )
+          if (rawResult.isNotBlank()) {
+            realOutput = rawResult
+          }
+        }
+      } catch (e: Throwable) {
+        Log.e(TAG, "Error en inferencia C++ GGUF nativa", e)
+      } finally {
+        if (handle != 0L) {
+          try {
+            cppBridge.freeModelContextNative(handle)
+          } catch (_: Throwable) {}
+        }
+        try {
+          pfd?.close()
+        } catch (_: Throwable) {}
       }
     }
 

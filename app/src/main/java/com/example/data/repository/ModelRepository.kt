@@ -1,5 +1,7 @@
 package com.example.data.repository
 
+import android.content.Context
+import com.example.engine.NativeCppBridge
 import com.example.model.LocalAiModel
 import com.example.model.ModelFormatType
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,24 +15,55 @@ class ModelRepository {
   private val _customModels = MutableStateFlow<List<LocalAiModel>>(emptyList())
   val customModels: StateFlow<List<LocalAiModel>> = _customModels.asStateFlow()
 
-  fun addGgufModel(uriOrPath: String, displayName: String? = null): LocalAiModel {
-    val cleanName = displayName?.ifBlank { null }
+  fun addGgufModel(uriOrPath: String, displayName: String? = null, context: Context? = null): LocalAiModel {
+    val meta = NativeCppBridge.parseGgufMetadataSafe(uriOrPath, context)
+
+    val cleanFallbackName = displayName?.ifBlank { null }
       ?: uriOrPath.substringAfterLast("/").substringBeforeLast(".")
         .replace("-", " ")
         .replace("_", " ")
 
+    val modelName = when {
+      !displayName.isNullOrBlank() -> displayName
+      meta != null && meta.isValid && meta.modelName.isNotBlank() && meta.modelName != "GGUF Model" -> meta.modelName
+      meta != null && meta.isValid && meta.architecture.isNotBlank() -> "${meta.architecture.replaceFirstChar { it.titlecase() }} GGUF (Local)"
+      else -> cleanFallbackName
+    }
+
+    val contextLen = if (meta != null && meta.isValid && meta.contextLength > 0) {
+      meta.contextLength.toInt().coerceIn(512, 131072)
+    } else {
+      4096
+    }
+
+    val arch = if (meta != null && meta.isValid && meta.architecture.isNotBlank()) meta.architecture else "llama"
+    val paramSize = if (meta != null && meta.isValid && meta.blockCount > 0) {
+      when {
+        meta.blockCount <= 16 -> "0.5B / SLM"
+        meta.blockCount <= 28 -> "1.5B - 3B"
+        meta.blockCount <= 32 -> "7B / 8B"
+        else -> "${meta.blockCount} capas"
+      }
+    } else {
+      "Auto (GGUF)"
+    }
+
     val newModel = LocalAiModel(
       id = "gguf-${UUID.randomUUID()}",
-      name = cleanName,
-      developer = "Archivo Local GGUF",
-      parameterSize = "Auto (GGUF)",
+      name = modelName,
+      developer = "Archivo Local GGUF (${arch.uppercase()})",
+      parameterSize = paramSize,
       quantization = "Q4 / Mixto",
       ramRequired = "Bajo consumo mmap",
       speedEstimate = "~25-45 tok/s (GPU)",
-      recommendedFor = "Inferencia directa todo en uno (.gguf) con llama.cpp",
+      recommendedFor = if (meta != null && meta.isValid) {
+        "Inferencia nativa C++ (${arch.uppercase()} | ${meta.tensorCount} tensores | v${meta.version})"
+      } else {
+        "Inferencia directa todo en uno (.gguf) con llama.cpp"
+      },
       downloadSize = "Local",
       formatType = ModelFormatType.GGUF,
-      contextLength = 4096,
+      contextLength = contextLen,
       isUserImported = true,
       filePathOrUri = uriOrPath,
       defaultSystemPrompt = "Eres un asistente de IA local ejecutado de forma privada desde tu archivo GGUF."

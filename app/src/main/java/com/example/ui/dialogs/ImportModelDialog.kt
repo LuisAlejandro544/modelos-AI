@@ -47,12 +47,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.engine.GgufParsedInfo
+import com.example.engine.NativeCppBridge
 import com.example.model.ModelFormatType
 
 @Composable
@@ -72,10 +75,12 @@ fun ImportModelDialog(
   onOpenTokenizerGuide: () -> Unit,
   onDismiss: () -> Unit
 ) {
+  val context = LocalContext.current
   var modelName by remember { mutableStateOf("") }
   var selectedFormat by remember { mutableStateOf(ModelFormatType.GGUF) }
   var parameterSize by remember { mutableStateOf("500M") }
   var quantization by remember { mutableStateOf("Q4_K_M") }
+  var detectedGgufInfo by remember { mutableStateOf<GgufParsedInfo?>(null) }
   
   // File Paths
   var modelFilePath by remember { mutableStateOf("") }
@@ -91,16 +96,38 @@ fun ImportModelDialog(
     contract = ActivityResultContracts.OpenDocument()
   ) { uri ->
     uri?.let {
-      val lastPathSegment = it.lastPathSegment ?: it.toString()
-      modelFilePath = it.toString()
-      if (modelName.isBlank()) {
-        val cleanName = lastPathSegment.substringAfterLast("/").substringBeforeLast(".")
-        modelName = cleanName.replace("-", " ").replace("_", " ").capitalizeWords()
-      }
+      val uriStr = it.toString()
+      val lastPathSegment = it.lastPathSegment ?: uriStr
+      modelFilePath = uriStr
+
       if (lastPathSegment.endsWith(".safetensors", ignoreCase = true)) {
         selectedFormat = ModelFormatType.SAFETENSORS
-      } else if (lastPathSegment.endsWith(".gguf", ignoreCase = true)) {
+        detectedGgufInfo = null
+      } else {
         selectedFormat = ModelFormatType.GGUF
+        val meta = NativeCppBridge.parseGgufMetadataSafe(uriStr, context)
+        detectedGgufInfo = meta
+        if (meta != null && meta.isValid) {
+          if (modelName.isBlank() || modelName.startsWith("Modelo")) {
+            modelName = if (meta.modelName.isNotBlank() && meta.modelName != "GGUF Model") {
+              meta.modelName
+            } else {
+              "${meta.architecture.replaceFirstChar { c -> if (c.isLowerCase()) c.titlecase() else c.toString() }} GGUF (Local)"
+            }
+          }
+          if (meta.blockCount > 0) {
+            parameterSize = when {
+              meta.blockCount <= 16 -> "500M"
+              meta.blockCount <= 24 -> "1.1B"
+              meta.blockCount <= 28 -> "1.5B"
+              meta.blockCount <= 32 -> "3B"
+              else -> "7B"
+            }
+          }
+        } else if (modelName.isBlank()) {
+          val cleanName = lastPathSegment.substringAfterLast("/").substringBeforeLast(".")
+          modelName = cleanName.replace("-", " ").replace("_", " ").capitalizeWords()
+        }
       }
     }
   }
@@ -318,6 +345,55 @@ fun ImportModelDialog(
             buttonTestTag = "browse_model_file_button",
             onBrowseClick = { modelFilePickerLauncher.launch(arrayOf("*/*")) }
           )
+
+          // GGUF detected metadata preview banner
+          if (selectedFormat == ModelFormatType.GGUF && detectedGgufInfo != null && detectedGgufInfo?.isValid == true) {
+            val meta = detectedGgufInfo!!
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+              ),
+              shape = RoundedCornerShape(14.dp)
+            ) {
+              Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+              ) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Text(
+                    text = "⚡ Cabecera GGUF v${meta.version} validada",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                  )
+                  Text(
+                    text = meta.architecture.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                  )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                  text = "• Contexto nativo: ${meta.contextLength} tokens | Tensores: ${meta.tensorCount}",
+                  style = MaterialTheme.typography.bodySmall,
+                  fontSize = 11.5.sp,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                  text = "• Mapeo flash: mmap zero-copy compatible con ParcelFileDescriptor",
+                  style = MaterialTheme.typography.bodySmall,
+                  fontSize = 11.5.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+          }
 
           // SafeTensors specific configs
           if (selectedFormat == ModelFormatType.SAFETENSORS) {

@@ -1,4 +1,4 @@
-# CMakeLists.txt for Local AI C++ Native Engine
+# CMakeLists.txt for Local AI C++ Native Engine (llama.cpp & GGUF Support)
 cmake_minimum_required(VERSION 3.22.1)
 
 project("local_ai_cpp")
@@ -6,10 +6,11 @@ project("local_ai_cpp")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Source files for the native C++ inference bridge
+# Source files for the native C++ GGUF inference engine
 add_library(
     local_ai_cpp
     SHARED
+    gguf_parser.cpp
     local_ai_engine.cpp
 )
 

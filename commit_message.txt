@@ -1,13 +1,39 @@
-feat(engine): inferencia real en Rust Candle para SafeTensors y optimizacion CI/CD con cache
+feat(engine): integracion de streaming GGUF C++, deteccion automatica en ModelRepository, importacion 1-clic y cache CI/CD
 
-- Implementado forward pass real en app/src/main/rust/src/lib.rs con Hugging Face Candle 0.8.2:
-  * Deserializacion y mapeo en memoria zero-copy (mmap2) de archivos .safetensors.
-  * Extraccion e indexacion de tensores de embedding y capa LM Head (lm_head.weight).
-  * Computo de normalizacion RMSNorm (rms_norm) y multiplicacion matricial forward.
-  * Muestreo autoregresivo real con LogitsProcessor (soporte para temperatura y Top-P).
-  * Decodificacion token a token mediante el crate oficial tokenizers (tokenizer.json).
-  * Deteccion de tokens de parada especiales (</s>, <|endoftext|>, <|im_end|>, <end_of_turn>, <|eot_id|>).
-- Configurado Swatinem/rust-cache@v2 en .github/workflows/build-apk.yml para almacenar en cache dependencias Cargo y artefactos de compilacion en app/src/main/rust/target.
-- Agregado cache dedicado para el binario cargo-ndk con actions/cache@v4 para evitar descargas e instalaciones redundantes en cada ejecucion.
-- Optimizado el flujo de CI/CD para compilar librerias nativas arm64-v8a, armeabi-v7a y x86_64 del motor Hugging Face Candle en menor tiempo.
-- Mantenido el cache oficial de Gradle (setup-gradle@v4) y la generacion automatica de debug.keystore.
+- Conexión de Detección Automática de GGUF en ModelRepository.kt:
+  * Integración con NativeCppBridge.parseGgufMetadataSafe para inspección binaria inmediata de arquitectura, tensores, número de capas y ventana de contexto.
+  * Asignación automática de nombres legibles, tamaño de parámetros inferido (0.5B a 7B+) y metadatos de aceleración sin requerir entrada manual del usuario.
+
+- Integración del Flujo de Streaming Real en LocalInferenceEngine.kt:
+  * Ejecución de inferencia nativa para modelos GGUF vía C++ JNI (initGgufModelFromFd / initModelContextNative y evaluatePromptNative).
+  * Soporte completo de ParcelFileDescriptor (content:// URIs de Storage Access Framework) y rutas directas con mmap zero-copy.
+  * Limpieza segura y garantizada del contexto nativo (freeModelContextNative) y gestión de cancelación atómica.
+
+- Diálogo de Importación Simple de 1 Clic (ImportModelDialog.kt y WelcomeScreen.kt):
+  * Inspección en vivo al seleccionar archivos .gguf con tarjeta de validación de cabecera GGUF v2/v3, tensores y contexto nativo.
+  * Carga directa y transición fluida a la pantalla de chat lista para generar respuestas.
+
+- Actualización y Optimización de GitHub Actions (.github/workflows/build-apk.yml):
+  * Instalación automática de Android NDK (r28) y CMake (3.22.1) con aceptación desatendida de licencias de Android SDK.
+  * Sistema de caché para compilaciones C++ CMake y Ninja (app/.cxx, app/build/intermediates/cxx) y caché persistente para Rust Candle y cargo-ndk.
+
+- Implementación del motor nativo C++ para modelos GGUF (v2 y v3) con soporte para llama.cpp:
+  * Creado parser binario de cabeceras GGUF en C++ (app/src/main/cpp/gguf_parser.cpp, gguf_types.h y gguf_parser.h) para lectura zero-copy de cabecera 'GGUF' (0x46554747).
+  * Extracción instantánea en milisegundos de metadatos del modelo: arquitectura (llama, qwen2, phi3, gemma2), longitud de contexto, tensores, vocabulario y plantilla de chat.
+  * Soporte para carga de modelos GGUF desde descriptores de archivo Android (ParcelFileDescriptor / fd) y rutas absolutas utilizando mmap para paginación de tensores desde almacenamiento flash.
+  * Añadida gestión nativa de contexto con hilos configurables, asignación de handle jlong y control atómico de cancelación de inferencia (cancelGgufInference).
+  * Actualizado NativeCppBridge.kt con parseGgufMetadataSafe y métodos JNI para enlace directo con la capa de presentación Compose.
+  * Configurado CMakeLists.txt para compilación multi-ABI (arm64-v8a, armeabi-v7a, x86_64) con optimizaciones ARM NEON y C++17.
+
+- Modularización integral de componentes de interfaz y motor nativo para alta mantenibilidad:
+  * ChatScreen: Descompuesta en submódulos especializados en ui/chat/components/ (ChatTopBar, ContextMeterBar, ChatInputBar, ChatMessageBubble, ChatWelcomeSuggestions). Reducción del archivo principal de ~782 a <180 líneas.
+  * SafeTensorsImportScreen: Descompuesta en ui/safetensors/components/ (FilePickerCard, SafeTensorsHeaderCard, SafeTensorsMetadataForm) y extracción de lógica JSON a ui/safetensors/parser/ModelConfigParser.
+  * Motor Rust Candle: Separado en módulos nativos en app/src/main/rust/src/ (engine.rs, model_loader.rs, sampler.rs, jni_bridge.rs y lib.rs).
+  * Documentación y Estructura: Sincronizados README.md, ROADMAP.md, AI_CONTEXT.md y STRUCTURE.md.
+
+- Solucionado error 'Archivo de tensores no encontrado' al seleccionar archivos mediante URIs virtuales (content://):
+  * Creada clase de aplicacion App (App.kt) para proveer acceso global seguro al ContentResolver de Android.
+  * Implementado metodo JNI evaluateSafeTensorsWithFd en Rust (app/src/main/rust/src/lib.rs) y Kotlin (RustInferenceBridge.kt).
+  * Obtenido descriptor de archivo nativo (ParcelFileDescriptor / fd) desde ContentResolver y mapeado directamente con mmap2::Mmap::map (Zero-Copy).
+  * Lectura directa en memoria de tokenizer.json, config.json y tokenizer_config.json y carga con Tokenizer::from_bytes en Rust.
+  * Preservado el ciclo de vida de los file descriptors evitando cierres duplicados (std::mem::forget en Rust y bloque finally en Kotlin).

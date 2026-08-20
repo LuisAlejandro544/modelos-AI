@@ -12,21 +12,30 @@ Organización modular del código fuente de la aplicación Android.
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── AndroidManifest.xml
-│   │   │   ├── cpp/                # Motor nativo C++ (llama.cpp NDK / CMake)
-│   │   │   │   ├── CMakeLists.txt
-│   │   │   │   └── local_ai_engine.cpp
+│   │   │   ├── cpp/                # Motor nativo C++ (llama.cpp NDK / CMake / GGUF v2/v3)
+│   │   │   │   ├── CMakeLists.txt          # Script de construcción CMake para C++
+│   │   │   │   ├── gguf_types.h            # Definición de especificación GGUF, magic 0x46554747 y tipos GGML
+│   │   │   │   ├── gguf_parser.h           # Cabecera del parser binario de metadatos GGUF
+│   │   │   │   ├── gguf_parser.cpp         # Lector zero-copy mmap de arquitectura, tensores y vocabulario
+│   │   │   │   └── local_ai_engine.cpp     # Enlaces JNI C++, gestión de contexto nativo y control de cancelación
 │   │   │   ├── rust/               # Motor nativo Rust (Candle / UniFFI)
 │   │   │   │   ├── Cargo.toml
-│   │   │   │   └── src/lib.rs
+│   │   │   │   └── src/
+│   │   │   │       ├── lib.rs              # Punto de entrada y exportaciones de módulos en Rust
+│   │   │   │       ├── engine.rs           # Bucle autoregresivo Candle, RMSNorm y forward pass
+│   │   │   │       ├── model_loader.rs     # Deserialización SafeTensors (mmap con ParcelFileDescriptor)
+│   │   │   │       ├── sampler.rs          # Control de interrupción y sampling de logits
+│   │   │   │       └── jni_bridge.rs       # Métodos nativos JNI con Android JVM
 │   │   │   ├── java/com/example/
+│   │   │   │   ├── App.kt          # Aplicación Android con proveedor global de ContentResolver
 │   │   │   │   ├── MainActivity.kt # Actividad principal y navegación Compose
 │   │   │   │   ├── data/
 │   │   │   │   │   └── repository/
 │   │   │   │   │       └── ModelRepository.kt        # Gestión reactiva y ciclo de vida de modelos locales (GGUF / SafeTensors)
 │   │   │   │   ├── engine/
 │   │   │   │   │   ├── LocalInferenceEngine.kt       # Coordinador central de inferencia local y streaming
-│   │   │   │   │   ├── NativeCppBridge.kt            # JNI C++ (llama.cpp, NEON, Vulkan, mmap)
-│   │   │   │   │   ├── RustInferenceBridge.kt        # JNI Rust (Candle, memoria segura)
+│   │   │   │   │   ├── NativeCppBridge.kt            # JNI C++ (llama.cpp, NEON, Vulkan, parser GGUF mmap)
+│   │   │   │   │   ├── RustInferenceBridge.kt        # JNI Rust (Candle, memoria segura y ParcelFileDescriptor)
 │   │   │   │   │   ├── formatter/
 │   │   │   │   │   │   └── ChatTemplateFormatter.kt  # Formateo de plantillas de chat (ChatML, Llama-3, Gemma, Mistral)
 │   │   │   │   │   ├── hardware/
@@ -39,12 +48,26 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   │   └── LocalModel.kt                 # Definición de modelos GGUF/SafeTensors y formatos
 │   │   │   │   ├── ui/
 │   │   │   │   │   ├── chat/
-│   │   │   │   │   │   └── ChatScreen.kt             # Pantalla de chat, medidor de tokens, barra de contexto y t/s
+│   │   │   │   │   │   ├── ChatScreen.kt             # Pantalla orquestadora de chat y diálogos
+│   │   │   │   │   │   └── components/
+│   │   │   │   │   │       ├── ChatTopBar.kt             # Barra superior con chip de modelo, parámetros y limpiar
+│   │   │   │   │   │       ├── ContextMeterBar.kt        # Barra de progreso de tokens, contexto y t/s en vivo
+│   │   │   │   │   │       ├── ChatInputBar.kt           # Barra de entrada de texto, botón Stop/Send e indicador Offline
+│   │   │   │   │   │       ├── ChatMessageBubble.kt      # Burbujas de mensajes con métricas y botón de copiado
+│   │   │   │   │   │       └── ChatWelcomeSuggestions.kt # Estado inicial con sugerencias de prompts
 │   │   │   │   │   ├── dialogs/
 │   │   │   │   │   │   ├── ImportModelDialog.kt      # Diálogo de importación de modelos de usuario
 │   │   │   │   │   │   ├── ModelSelectorDialog.kt    # Selector de modelos
 │   │   │   │   │   │   ├── ParametersDialog.kt       # Selector GPU/NPU/CPU, toggle mmap, contexto y sliders
 │   │   │   │   │   │   └── TokenizerGuideDialog.kt   # Guía de compatibilidad de tokenizadores
+│   │   │   │   │   ├── safetensors/
+│   │   │   │   │   │   ├── SafeTensorsImportScreen.kt# Pantalla orquestadora de importación SafeTensors
+│   │   │   │   │   │   ├── components/
+│   │   │   │   │   │   │   ├── FilePickerCard.kt         # Selector de archivo individual con estado y acciones
+│   │   │   │   │   │   │   ├── SafeTensorsHeaderCard.kt  # Banner informativo de archivos requeridos y metadatos
+│   │   │   │   │   │   │   └── SafeTensorsMetadataForm.kt# Formulario de parámetros, cuantización y botón de inicio
+│   │   │   │   │   │   └── parser/
+│   │   │   │   │   │       └── ModelConfigParser.kt      # Parser JSON de config.json y tokenizer_config.json
 │   │   │   │   │   ├── theme/                        # Colores, tipografía y tema Material 3
 │   │   │   │   │   └── welcome/
 │   │   │   │   │       └── WelcomeScreen.kt          # Pantalla inicial con specs de hardware y aceleración
