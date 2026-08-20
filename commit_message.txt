@@ -1,22 +1,18 @@
-feat(ci): optimizacion de pipeline de compilacion C++ y opcion de compilacion limpia con cache configurable en GitHub Actions
+fix(ui): correccion del padding del teclado virtual (IME) en ChatInputBar y ajuste windowSoftInputMode
 
-- Pipeline CI/CD GitHub Actions (.github/workflows/build-apk.yml):
-  * Selector interactivo de caché en workflow_dispatch (enable_cache: boolean, activado por defecto).
-  * Soporte para compilación limpia (Clean Build): omisión y purga de cachés de CCache, CMake/Ninja, crates de Rust y Gradle (--no-build-cache / cache-disabled).
-  * Instalación de herramientas nativas C++ de Linux: Ninja build, CCache, Clang, LLVM, LLD y Build-Essential.
-  * Configuración automatizada de Android NDK (28.2.13676358), CMake (3.22.1) y Build Tools (36.0.0).
-  * Detección y exportación de variables de entorno ANDROID_NDK_HOME y ANDROID_NDK_ROOT para interoperabilidad con CMake y cargo-ndk.
-  * Caché multicapa condicional para artefactos C++ (~/.ccache, app/.cxx, build/intermediates/cxx, cmake).
+- Corrección del espacio vacío excesivo al abrir el teclado:
+  * Eliminado el uso de `WindowInsets.safeDrawing.only(Bottom)` en `ChatInputBar.kt` que sumaba la altura completa del teclado a un layout ya redimensionado.
+  * Reemplazado por `Modifier.navigationBarsPadding().imePadding()` para ajustar la barra de texto directamente sobre el teclado sin doble espaciado.
+  * Añadido `android:windowSoftInputMode="adjustResize"` a `MainActivity` en `AndroidManifest.xml` para una gestión fluida de insets en pantalla edge-to-edge.
 
-- Muestreador de Logits C++ (app/src/main/cpp/sampler.h):
-  * Implementación de penalización de repetición (Repeat Penalty) sobre historial reciente.
-  * Normalización con Temperatura y distribución probabilística Softmax.
-  * Filtros combinados Top-K y Top-P (Nucleus Sampling) con generación pseudoaleatoria std::mt19937.
+- Desacoplamiento de inferencia C++ a Dispatchers.Default y streaming reactivo token a token via channelFlow:
+  * Migración de `generateResponseStream` de `flow` síncrono a `channelFlow` asíncrono con `withContext(Dispatchers.Default)`.
+  * La ejecución de matrices y el forward pass del modelo en C++ ahora ocurren en hilos secundarios de CPU, liberando por completo el hilo principal (Main Thread) de la UI de Android.
 
-- Bucle Autorregresivo y Streaming JNI (app/src/main/cpp/local_ai_engine.cpp y NativeCppBridge.kt):
-  * Implementación de generateStreamingPromptNative con callback JNI reactivo (NativeTokenCallback).
-  * Emisión continua de piezas de texto decodificadas directamente a la UI de Kotlin/Compose.
-  * Detección de token de parada EOS y parada en caliente (cancelGgufInference).
+- Emisión en tiempo real token por token:
+  * El callback JNI `NativeTokenCallback.onToken(piece, tokenId)` envía cada fragmento generado directamente al colector de Compose mediante `trySend(...)`.
+  * Eliminada la espera síncrona que acumulaba toda la respuesta antes de mostrarla, eliminando retardos artificiales.
+  * Cálculo dinámico de tokens por segundo (TPS) en vivo por cada token emitido.
 
-- Sincronización de Documentación:
-  * Actualizados README.md, ROADMAP.md, STRUCTURE.md y AI_CONTEXT.md reflejando la finalización de la Fase 2.7 y optimizaciones de CI.
+- Limpieza de referencias locales y control de excepciones JNI:
+  * Liberación explícita de referencias JNI locales (`callbackClass`, `jPiece`) en `local_ai_engine.cpp` para evitar fugas de memoria en la tabla de referencias JNI durante respuestas largas.

@@ -411,10 +411,13 @@ Java_com_example_engine_NativeCppBridge_generateStreamingPromptNative(
     ctx->isCancelled.store(false);
 
     // Setup JNI Callback
-    jclass callbackClass = env->GetObjectClass(callback);
     jmethodID onTokenMethod = nullptr;
-    if (callbackClass) {
-        onTokenMethod = env->GetMethodID(callbackClass, "onToken", "(Ljava/lang/String;I)Z");
+    if (callback) {
+        jclass callbackClass = env->GetObjectClass(callback);
+        if (callbackClass) {
+            onTokenMethod = env->GetMethodID(callbackClass, "onToken", "(Ljava/lang/String;I)Z");
+            env->DeleteLocalRef(callbackClass);
+        }
     }
 
     // 1. Encode prompt

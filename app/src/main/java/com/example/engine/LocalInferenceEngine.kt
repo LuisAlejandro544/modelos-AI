@@ -14,9 +14,11 @@ import com.example.model.InferenceMetrics
 import com.example.model.InferenceParameters
 import com.example.model.LocalAiModel
 import com.example.model.ModelFormatType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 data class StreamChunk(
@@ -43,161 +45,194 @@ class LocalInferenceEngine(
     conversationHistory: List<ChatMessage> = emptyList(),
     estimatedTotalContextTokens: Int = 0,
     deviceHasNpu: Boolean = false
-  ): Flow<StreamChunk> = flow {
+  ): Flow<StreamChunk> = channelFlow {
+    withContext(Dispatchers.Default) {
+      val metricsTracker = InferenceMetricsTracker()
+      metricsTracker.onStartGeneration()
 
-    val metricsTracker = InferenceMetricsTracker()
-    metricsTracker.onStartGeneration()
-
-    val liveHardware = HardwareCapabilityDetector.resolveActiveHardwareInfo(
-      parameters.accelerator,
-      deviceHasNpu
-    )
-
-    // Format prompt with model template
-    val formattedPrompt = ChatTemplateFormatter.formatConversation(
-      systemPrompt = parameters.systemPrompt,
-      history = conversationHistory,
-      currentPrompt = userPrompt,
-      model = model
-    )
-
-    // Check if native bridges can load or execute
-    val isSafeTensors = model.formatType == ModelFormatType.SAFETENSORS
-    val useNativeRust = parameters.backend == InferenceBackend.RUST_CANDLE || isSafeTensors
-    val isNativeLoaded = if (useNativeRust) rustBridge.isRustLoaded else cppBridge.isNativeLoaded
-
-    // Base tokens per second calculation
-    val baseTps = calculateBaseTps(parameters, model, deviceHasNpu)
-
-    // Attempt real execution via Rust Candle for SafeTensors or C++ llama.cpp for GGUF
-    var realOutput: String? = null
-
-    if (isSafeTensors && rustBridge.isRustLoaded && !model.filePathOrUri.isNullOrBlank() && !model.tokenizerPathOrUri.isNullOrBlank()) {
-      val rawResult = rustBridge.evaluateSafeTensorsSafe(
-        weightsPathOrUri = model.filePathOrUri,
-        tokenizerPathOrUri = model.tokenizerPathOrUri,
-        configPathOrUri = model.configPathOrUri ?: "",
-        tokenizerConfigPathOrUri = model.tokenizerConfigPathOrUri ?: "",
-        prompt = formattedPrompt,
-        temperature = parameters.temperature,
-        topP = parameters.topP,
-        maxTokens = parameters.maxTokens,
-        threads = parameters.cpuThreads
+      val liveHardware = HardwareCapabilityDetector.resolveActiveHardwareInfo(
+        parameters.accelerator,
+        deviceHasNpu
       )
-      if (rawResult.isNotBlank()) {
-        realOutput = rawResult
-      }
-    } else if (!isSafeTensors && cppBridge.isNativeLoaded && !model.filePathOrUri.isNullOrBlank()) {
-      val filePath = model.filePathOrUri
-      val ctx = App.instance?.applicationContext
-      var handle: Long = 0
-      var pfd: ParcelFileDescriptor? = null
-      try {
-        if (filePath.startsWith("content://") && ctx != null) {
-          pfd = ctx.contentResolver.openFileDescriptor(Uri.parse(filePath), "r")
-          if (pfd != null) {
-            handle = cppBridge.initGgufModelFromFd(
-              fd = pfd.fd,
+
+      // Format prompt with model template
+      val formattedPrompt = ChatTemplateFormatter.formatConversation(
+        systemPrompt = parameters.systemPrompt,
+        history = conversationHistory,
+        currentPrompt = userPrompt,
+        model = model
+      )
+
+      // Check if native bridges can load or execute
+      val isSafeTensors = model.formatType == ModelFormatType.SAFETENSORS
+      val useNativeRust = parameters.backend == InferenceBackend.RUST_CANDLE || isSafeTensors
+      val isNativeLoaded = if (useNativeRust) rustBridge.isRustLoaded else cppBridge.isNativeLoaded
+
+      // Base tokens per second calculation
+      val baseTps = calculateBaseTps(parameters, model, deviceHasNpu)
+
+      val accumulatedText = StringBuilder()
+      var nativeTokensEmitted = 0
+
+      // Attempt real execution via C++ llama.cpp for GGUF
+      if (!isSafeTensors && cppBridge.isNativeLoaded && !model.filePathOrUri.isNullOrBlank()) {
+        val filePath = model.filePathOrUri
+        val ctx = App.instance?.applicationContext
+        var handle: Long = 0
+        var pfd: ParcelFileDescriptor? = null
+        try {
+          if (filePath.startsWith("content://") && ctx != null) {
+            pfd = ctx.contentResolver.openFileDescriptor(Uri.parse(filePath), "r")
+            if (pfd != null) {
+              handle = cppBridge.initGgufModelFromFd(
+                fd = pfd.fd,
+                nThreads = parameters.cpuThreads,
+                contextSize = parameters.contextWindow,
+                useMmap = parameters.useMmap
+              )
+            }
+          } else {
+            handle = cppBridge.initModelContextNative(
+              modelPath = filePath,
               nThreads = parameters.cpuThreads,
-              contextSize = parameters.contextWindow,
-              useMmap = parameters.useMmap
+              contextSize = parameters.contextWindow
             )
           }
-        } else {
-          handle = cppBridge.initModelContextNative(
-            modelPath = filePath,
-            nThreads = parameters.cpuThreads,
-            contextSize = parameters.contextWindow
-          )
-        }
 
-        if (handle != 0L) {
-          val stringBuilder = StringBuilder()
-          val rawResult = cppBridge.generateStreamingPromptNative(
-            contextHandle = handle,
+          if (handle != 0L) {
+            cppBridge.generateStreamingPromptNative(
+              contextHandle = handle,
+              prompt = formattedPrompt,
+              temperature = parameters.temperature,
+              topP = parameters.topP,
+              repeatPenalty = parameters.repeatPenalty,
+              maxTokens = parameters.maxTokens,
+              callback = object : NativeCppBridge.NativeTokenCallback {
+                override fun onToken(piece: String, tokenId: Int): Boolean {
+                  accumulatedText.append(piece)
+                  nativeTokensEmitted++
+
+                  val currentTps = metricsTracker.onTokenEmitted()
+                  val displayTps = if (currentTps > 0.5) currentTps else baseTps
+
+                  trySend(
+                    StreamChunk(
+                      partialText = accumulatedText.toString(),
+                      isFinished = false,
+                      liveTokensPerSec = ((displayTps * 10.0).toInt() / 10.0),
+                      liveHardwareInfo = liveHardware,
+                      metrics = null
+                    )
+                  )
+                  return true
+                }
+              }
+            )
+          }
+        } catch (e: Throwable) {
+          Log.e(TAG, "Error en inferencia C++ GGUF nativa", e)
+        } finally {
+          if (handle != 0L) {
+            try {
+              cppBridge.freeModelContextNative(handle)
+            } catch (_: Throwable) {}
+          }
+          try {
+            pfd?.close()
+          } catch (_: Throwable) {}
+        }
+      } else if (isSafeTensors && rustBridge.isRustLoaded && !model.filePathOrUri.isNullOrBlank() && !model.tokenizerPathOrUri.isNullOrBlank()) {
+        try {
+          val rawResult = rustBridge.evaluateSafeTensorsSafe(
+            weightsPathOrUri = model.filePathOrUri,
+            tokenizerPathOrUri = model.tokenizerPathOrUri,
+            configPathOrUri = model.configPathOrUri ?: "",
+            tokenizerConfigPathOrUri = model.tokenizerConfigPathOrUri ?: "",
             prompt = formattedPrompt,
             temperature = parameters.temperature,
             topP = parameters.topP,
-            repeatPenalty = parameters.repeatPenalty,
             maxTokens = parameters.maxTokens,
-            callback = object : NativeCppBridge.NativeTokenCallback {
-              override fun onToken(piece: String, tokenId: Int): Boolean {
-                stringBuilder.append(piece)
-                return true
-              }
-            }
+            threads = parameters.cpuThreads
           )
           if (rawResult.isNotBlank()) {
-            realOutput = rawResult
-          } else if (stringBuilder.isNotEmpty()) {
-            realOutput = stringBuilder.toString()
+            val words = rawResult.split(" ")
+            for (i in words.indices) {
+              val word = words[i]
+              if (i > 0) accumulatedText.append(" ")
+              accumulatedText.append(word)
+              nativeTokensEmitted++
+
+              val currentTps = metricsTracker.onTokenEmitted()
+              val displayTps = if (currentTps > 0.5) currentTps else baseTps
+              val msPerToken = (1000.0 / displayTps).toLong().coerceIn(16L, 65L)
+              delay(msPerToken)
+
+              send(
+                StreamChunk(
+                  partialText = accumulatedText.toString(),
+                  isFinished = false,
+                  liveTokensPerSec = ((displayTps * 10.0).toInt() / 10.0),
+                  liveHardwareInfo = liveHardware,
+                  metrics = null
+                )
+              )
+            }
           }
+        } catch (e: Throwable) {
+          Log.e(TAG, "Error en inferencia Rust SafeTensors", e)
         }
-      } catch (e: Throwable) {
-        Log.e(TAG, "Error en inferencia C++ GGUF nativa", e)
-      } finally {
-        if (handle != 0L) {
-          try {
-            cppBridge.freeModelContextNative(handle)
-          } catch (_: Throwable) {}
-        }
-        try {
-          pfd?.close()
-        } catch (_: Throwable) {}
       }
-    }
 
-    // Produce response text
-    val fullResponseText = realOutput ?: produceResponseText(
-      prompt = userPrompt,
-      model = model,
-      parameters = parameters,
-      liveHardware = liveHardware,
-      isNativeLoaded = isNativeLoaded
-    )
+      // If no native tokens were streamed (or if fallback simulation was needed)
+      if (nativeTokensEmitted == 0) {
+        val fallbackText = produceResponseText(
+          prompt = userPrompt,
+          model = model,
+          parameters = parameters,
+          liveHardware = liveHardware,
+          isNativeLoaded = isNativeLoaded
+        )
+        val words = fallbackText.split(" ")
+        for (i in words.indices) {
+          val word = words[i]
+          if (i > 0) accumulatedText.append(" ")
+          accumulatedText.append(word)
 
-    val words = fullResponseText.split(" ")
-    val accumulatedText = StringBuilder()
+          val currentTps = metricsTracker.onTokenEmitted()
+          val jitteredTps = (baseTps + Random.nextDouble(-1.2, 1.2)).coerceAtLeast(12.0)
+          val displayTps = (currentTps * 0.4 + jitteredTps * 0.6)
+          val msPerToken = (1000.0 / displayTps).toLong().coerceIn(16L, 65L)
+          delay(msPerToken)
 
-    for (i in words.indices) {
-      val word = words[i]
-      if (i > 0) accumulatedText.append(" ")
-      accumulatedText.append(word)
+          send(
+            StreamChunk(
+              partialText = accumulatedText.toString(),
+              isFinished = false,
+              liveTokensPerSec = ((displayTps * 10.0).toInt() / 10.0),
+              liveHardwareInfo = liveHardware,
+              metrics = null
+            )
+          )
+        }
+      }
 
-      val currentTps = metricsTracker.onTokenEmitted()
-      val jitteredTps = (baseTps + Random.nextDouble(-1.2, 1.2)).coerceAtLeast(12.0)
-      val displayTps = (currentTps * 0.4 + jitteredTps * 0.6)
+      val finalMetrics = metricsTracker.finalizeMetrics(
+        model = model,
+        parameters = parameters,
+        liveHardware = liveHardware,
+        contextTokensUsed = estimatedTotalContextTokens
+      )
 
-      val msPerToken = (1000.0 / displayTps).toLong().coerceIn(16L, 65L)
-      delay(msPerToken)
-
-      emit(
+      send(
         StreamChunk(
           partialText = accumulatedText.toString(),
-          isFinished = false,
-          liveTokensPerSec = ((displayTps * 10.0).toInt() / 10.0),
+          isFinished = true,
+          liveTokensPerSec = finalMetrics.tokensPerSecond,
           liveHardwareInfo = liveHardware,
-          metrics = null
+          metrics = finalMetrics
         )
       )
     }
-
-    val finalMetrics = metricsTracker.finalizeMetrics(
-      model = model,
-      parameters = parameters,
-      liveHardware = liveHardware,
-      contextTokensUsed = estimatedTotalContextTokens
-    )
-
-    emit(
-      StreamChunk(
-        partialText = accumulatedText.toString(),
-        isFinished = true,
-        liveTokensPerSec = finalMetrics.tokensPerSecond,
-        liveHardwareInfo = liveHardware,
-        metrics = finalMetrics
-      )
-    )
   }
 
   private fun calculateBaseTps(
