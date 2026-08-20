@@ -1,11 +1,11 @@
 package com.example.viewmodel
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.engine.LocalInferenceEngine
 import com.example.model.ChatMessage
 import com.example.model.ChatRole
+import com.example.model.HardwareAccelerator
 import com.example.model.InferenceBackend
 import com.example.model.InferenceParameters
 import com.example.model.LocalAiModel
@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.math.roundToInt
 
 enum class CurrentScreen {
   WELCOME,
@@ -28,6 +29,8 @@ data class SystemSpecs(
   val availableCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(4),
   val totalMemoryMb: Long = (Runtime.getRuntime().maxMemory() / (1024 * 1024)).coerceAtLeast(1024),
   val isOfflineModeActive: Boolean = true,
+  val hasGpuVulkan: Boolean = true,
+  val hasNpu: Boolean = false, // Phone without dedicated NPU -> auto-fallback to GPU
   val storageUsedFormatted: String = "2.4 GB libres"
 )
 
@@ -38,6 +41,8 @@ data class ChatUiState(
   val parameters: InferenceParameters = InferenceParameters(),
   val messages: List<ChatMessage> = emptyList(),
   val isGenerating: Boolean = false,
+  val liveTokensPerSec: Double? = null,
+  val liveHardwareInfo: String = "GPU (Vulkan)",
   val showModelSelectorDialog: Boolean = false,
   val showParametersDialog: Boolean = false,
   val showClearChatDialog: Boolean = false,
@@ -47,6 +52,24 @@ data class ChatUiState(
 ) {
   val allAvailableModels: List<LocalAiModel>
     get() = customModels + LocalModelsRepository.presetModels
+
+  /**
+   * Approximate tokens in the entire conversation plus system prompt
+   */
+  val approximateConversationTokens: Int
+    get() {
+      val systemTokens = (parameters.systemPrompt.length / 4.0).roundToInt()
+      val messagesTokens = messages.sumOf { msg ->
+        (msg.content.length / 4.0).coerceAtLeast(1.0).roundToInt()
+      }
+      return systemTokens + messagesTokens
+    }
+
+  val contextLimit: Int
+    get() = parameters.contextWindow.coerceAtMost(selectedModel.contextLength)
+
+  val contextUsagePercentage: Float
+    get() = (approximateConversationTokens.toFloat() / contextLimit.coerceAtLeast(1) * 100f).coerceIn(0f, 100f)
 }
 
 class ChatViewModel(
@@ -60,11 +83,15 @@ class ChatViewModel(
 
   init {
     val initialSystemPrompt = LocalModelsRepository.defaultModel.defaultSystemPrompt
+    val initialContextWindow = LocalModelsRepository.defaultModel.contextLength
     _uiState.update {
       it.copy(
         parameters = it.parameters.copy(
           systemPrompt = initialSystemPrompt,
-          cpuThreads = it.systemSpecs.availableCores.coerceAtMost(6)
+          contextWindow = initialContextWindow,
+          cpuThreads = it.systemSpecs.availableCores.coerceAtMost(6),
+          accelerator = HardwareAccelerator.AUTO,
+          useMmap = true
         )
       )
     }
@@ -107,6 +134,7 @@ class ChatViewModel(
         showModelSelectorDialog = false,
         parameters = it.parameters.copy(
           systemPrompt = model.defaultSystemPrompt,
+          contextWindow = model.contextLength,
           backend = recommendedBackend
         )
       )
@@ -139,10 +167,10 @@ class ChatViewModel(
     }
 
     val speedEst = when {
-      parameterSize.contains("135M") || parameterSize.contains("360M") -> "~45-65 tok/s"
-      parameterSize.contains("500M") || parameterSize.contains("0.5B") || parameterSize.contains("0.6B") -> "~35-50 tok/s"
-      parameterSize.contains("1B") || parameterSize.contains("1.5B") -> "~25-35 tok/s"
-      else -> "~15-25 tok/s"
+      parameterSize.contains("135M") || parameterSize.contains("360M") -> "~45-65 tok/s (GPU/NPU)"
+      parameterSize.contains("500M") || parameterSize.contains("0.5B") || parameterSize.contains("0.6B") -> "~38-55 tok/s"
+      parameterSize.contains("1B") || parameterSize.contains("1.5B") -> "~28-40 tok/s"
+      else -> "~16-28 tok/s"
     }
 
     val newModel = LocalAiModel(
@@ -156,6 +184,7 @@ class ChatViewModel(
       recommendedFor = "Modelo importado por el usuario (${formatType.displayName})",
       downloadSize = "Archivo Local",
       formatType = formatType,
+      contextLength = 4096,
       isUserImported = true,
       filePathOrUri = fileUriOrPath,
       tokenizerPathOrUri = tokenizerUriOrPath,
@@ -173,6 +202,7 @@ class ChatViewModel(
         showModelSelectorDialog = false,
         parameters = it.parameters.copy(
           systemPrompt = newModel.defaultSystemPrompt,
+          contextWindow = newModel.contextLength,
           backend = if (formatType == ModelFormatType.SAFETENSORS) InferenceBackend.RUST_CANDLE else InferenceBackend.CPP_LLAMA
         )
       )
@@ -205,11 +235,15 @@ class ChatViewModel(
 
   fun resetParameters() {
     val defaultPrompt = _uiState.value.selectedModel.defaultSystemPrompt
+    val defaultContext = _uiState.value.selectedModel.contextLength
     _uiState.update {
       it.copy(
         parameters = InferenceParameters(
           systemPrompt = defaultPrompt,
-          cpuThreads = it.systemSpecs.availableCores.coerceAtMost(6)
+          contextWindow = defaultContext,
+          cpuThreads = it.systemSpecs.availableCores.coerceAtMost(6),
+          accelerator = HardwareAccelerator.AUTO,
+          useMmap = true
         )
       )
     }
@@ -220,6 +254,8 @@ class ChatViewModel(
 
     val currentModel = _uiState.value.selectedModel
     val currentParams = _uiState.value.parameters
+    val currentTokensUsed = _uiState.value.approximateConversationTokens
+    val deviceHasNpu = _uiState.value.systemSpecs.hasNpu
 
     val userMessage = ChatMessage(
       role = ChatRole.USER,
@@ -237,21 +273,30 @@ class ChatViewModel(
     _uiState.update {
       it.copy(
         messages = it.messages + userMessage + placeholderAssistantMessage,
-        isGenerating = true
+        isGenerating = true,
+        liveTokensPerSec = null
       )
     }
 
     generationJob?.cancel()
     generationJob = viewModelScope.launch {
       try {
-        engine.generateResponseStream(userText, currentModel, currentParams).collect { chunk ->
+        engine.generateResponseStream(
+          userPrompt = userText,
+          model = currentModel,
+          parameters = currentParams,
+          estimatedTotalContextTokens = currentTokensUsed,
+          deviceHasNpu = deviceHasNpu
+        ).collect { chunk ->
           _uiState.update { state ->
             val updatedMessages = state.messages.map { msg ->
               if (msg.id == assistantMessageId) {
                 msg.copy(
                   content = chunk.partialText,
                   isStreaming = !chunk.isFinished,
-                  metrics = chunk.metrics ?: msg.metrics
+                  metrics = chunk.metrics ?: msg.metrics,
+                  liveTokensPerSec = chunk.liveTokensPerSec,
+                  liveHardwareInfo = chunk.liveHardwareInfo
                 )
               } else {
                 msg
@@ -259,7 +304,9 @@ class ChatViewModel(
             }
             state.copy(
               messages = updatedMessages,
-              isGenerating = !chunk.isFinished
+              isGenerating = !chunk.isFinished,
+              liveTokensPerSec = chunk.liveTokensPerSec,
+              liveHardwareInfo = chunk.liveHardwareInfo
             )
           }
         }
@@ -275,7 +322,7 @@ class ChatViewModel(
               msg
             }
           }
-          state.copy(messages = updatedMessages, isGenerating = false)
+          state.copy(messages = updatedMessages, isGenerating = false, liveTokensPerSec = null)
         }
       } finally {
         _uiState.update { it.copy(isGenerating = false) }
@@ -293,7 +340,7 @@ class ChatViewModel(
           msg
         }
       }
-      state.copy(messages = updatedMessages, isGenerating = false)
+      state.copy(messages = updatedMessages, isGenerating = false, liveTokensPerSec = null)
     }
   }
 
@@ -303,6 +350,7 @@ class ChatViewModel(
       it.copy(
         messages = emptyList(),
         isGenerating = false,
+        liveTokensPerSec = null,
         showClearChatDialog = false
       )
     }

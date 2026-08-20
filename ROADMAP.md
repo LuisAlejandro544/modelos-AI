@@ -1,32 +1,39 @@
-# Roadmap del Proyecto AI Local (Android)
+# 🗺️ Roadmap de Desarrollo
 
-Este documento describe la visión, fases de desarrollo e hitos técnicos para evolucionar el motor de inferencia local en Android.
+Este documento detalla el estado actual del desarrollo y las metas futuras para la aplicación de IA Local en Android.
 
 ---
 
-## 🎯 Fase 1: Arquitectura Base e Interfaz de Usuario (Completada ✅)
-- [x] Diseño de interfaz Material Design 3 con paleta cálida y navegación fluida.
-- [x] Pantalla de bienvenida con diagnósticos de hardware (núcleos CPU, memoria disponible).
-- [x] Selector de modelos locales con filtrado por tamaño de parámetros y cuantización.
-- [x] Panel de configuración de parámetros de inferencia (temperatura, top-p, hilos CPU, repeat penalty).
-- [x] Generación de respuestas en streaming con métricas en tiempo real (tok/s, latencia, RAM).
+## 🟢 Fase 1: Fundamentos y UI Reactiva (Completada)
+- [x] Interfaz de chat moderna y fluida con **Jetpack Compose** y **Material 3**.
+- [x] Catálogo de modelos preconfigurados (Gemma 2, SmolLM, Qwen 2.5, Llama 3.2, Phi-3, DeepSeek-R1).
+- [x] Selector e importador de archivos locales `.gguf` y `.safetensors`.
+- [x] Diálogo interactivo de parámetros (Temperatura, Top-P, Repeat Penalty, Hilos de CPU).
+- [x] Pruebas automatizadas unitarias, de integración y de interfaz con **Robolectric** y **Roborazzi**.
 
-## 🎯 Fase 2: Soporte Multi-Formato y Puentes Nativos (Completada ✅)
-- [x] Integración de capas nativas C++17 (`CMakeLists.txt` + JNI bridge `NativeCppBridge.kt`).
-- [x] Integración de capas nativas Rust 2021 (`Cargo.toml` + `lib.rs` + `RustInferenceBridge.kt`).
-- [x] Selector de backend de ejecución (C++ `llama.cpp` vs. Rust `Candle` vs. Kotlin VM).
-- [x] Sistema de importación de modelos de usuario en formatos `.gguf` y `.safetensors`.
-- [x] Soporte para modelos ultraligeros (135M, 360M, 500M, 0.6B) y sub-4B.
-- [x] Guía integrada en la app sobre el uso de `tokenizer.json` / `vocab.json` vs. GGUF.
+---
 
-## 🎯 Fase 3: Aceleración por Hardware y Memoria (Próximos Pasos 🚧)
-- [ ] **Mapeo de Memoria (`mmap`) Avanzado:** Apertura directa de archivos GGUF mediante `FileDescriptor` para reducir el consumo de RAM en dispositivos con 3-4 GB.
-- [ ] **Aceleración GPU por Vulkan / OpenCL:** Enlazar shaders de cómputo en C++ para derivar el cálculo de capas densas a la GPU Adreno / Mali.
-- [ ] **Soporte NNAPI / MediaPipe LLM:** Ejecución opcional sobre NPUs móviles (Qualcomm Hexagon y MediaTek APU).
-- [ ] **Gestor de Descarga Integrado (Hugging Face Hub):** Descargar modelos `.gguf` directamente desde la app con barra de progreso, pausa y reanudación.
+## 🟢 Fase 2: Rendimiento, Contexto y Aceleración Móvil (Completada)
+- [x] **Contador de Tokens y Medidor de Contexto:** Monitoreo en tiempo real del tamaño de la conversación vs. el límite de la ventana de contexto del modelo.
+- [x] **Medidor de Velocidad de Tokens por Segundo (t/s):** Contador en vivo durante el streaming y estadísticas de rendimiento post-generación.
+- [x] **Acelerador de Hardware Seleccionable (GPU / NPU / CPU):**
+  - [x] Soporte para aceleración por GPU (Vulkan / Adreno-Mali).
+  - [x] Soporte para NPU (NNAPI / Qualcomm QNN).
+  - [x] Conmutación / fallback automático a GPU si el dispositivo no cuenta con NPU física.
+  - [x] Modo CPU clásico (ARM NEON multihilo).
+- [x] **Mapeo de Memoria Optimizado (`mmap`):** Carga perezosa desde memoria flash para reducir drásticamente el uso de RAM física en teléfonos de 3-4 GB de RAM.
 
-## 🎯 Fase 4: Persistencia y Herramientas Avanzadas (Futuro 🔮)
-- [ ] **Persistencia de Sesiones en Room Database:** Guardar conversaciones múltiples, historial de chats y biblioteca de modelos importados.
-- [ ] **RAG Local (Retrieval-Augmented Generation):** Ingesta de archivos PDF/TXT locales mediante embeddings vectoriales offline.
-- [ ] **Servidor HTTP Local (Wi-Fi Transfer):** Subir archivos `.gguf` desde el navegador del PC a la memoria del móvil sin cables.
-- [ ] **Soporte para Modelos de Visión (VLM):** Inferencia multimodal local (ej: Moondream 2 / Llama-3.2-Vision 3B).
+---
+
+## 🟡 Fase 3: Persistencia y Gestión Avanzada de Chats (Próxima)
+- [ ] Base de datos local **Room** para guardar y reanudar múltiples conversaciones independientes.
+- [ ] Exportación de chats a formato Markdown (`.md`) y texto plano.
+- [ ] Búsqueda y filtrado de mensajes históricos.
+- [ ] Gestión inteligente de KV-Cache para conversaciones largas (truncado o resumen automático).
+
+---
+
+## 🟣 Fase 4: Capacidades Multimodales y RAG Local
+- [ ] **RAG Local (Chat con Documentos):** Procesamiento e indexación local de archivos PDF/TXT para responder preguntas sobre documentos sin internet.
+- [ ] **Visión Local (VLM):** Soporte para modelos ligeros de visión (ej. Moondream / Llama 3.2 Vision) usando la cámara del teléfono.
+- [ ] **Transferencia Wi-Fi Local:** Servidor embebido para transferir modelos GGUF pesados desde una computadora al teléfono sin cables.

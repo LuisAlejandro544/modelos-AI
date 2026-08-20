@@ -18,10 +18,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DeveloperBoard
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.Button
@@ -36,6 +40,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -53,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.model.HardwareAccelerator
 import com.example.model.InferenceBackend
 import com.example.model.InferenceParameters
 import kotlin.math.roundToInt
@@ -65,7 +72,10 @@ fun ParametersDialog(
   onReset: () -> Unit,
   onDismiss: () -> Unit
 ) {
+  var selectedAccelerator by remember { mutableStateOf(currentParameters.accelerator) }
   var selectedBackend by remember { mutableStateOf(currentParameters.backend) }
+  var useMmap by remember { mutableStateOf(currentParameters.useMmap) }
+  var contextWindow by remember { mutableIntStateOf(currentParameters.contextWindow) }
   var temperature by remember { mutableFloatStateOf(currentParameters.temperature) }
   var topP by remember { mutableFloatStateOf(currentParameters.topP) }
   var topK by remember { mutableIntStateOf(currentParameters.topK) }
@@ -115,13 +125,13 @@ fun ParametersDialog(
             Spacer(modifier = Modifier.width(12.dp))
             Column {
               Text(
-                text = "Parámetros de Inferencia",
+                text = "Ajustes de Inferencia",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "Ajusta la ejecución local y motor nativo",
+                text = "Aceleración de hardware, mmap y contexto",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -150,30 +160,37 @@ fun ParametersDialog(
             .verticalScroll(rememberScrollState()),
           verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-          // Backend Selection
-          Column {
-            Text(
-              text = "Motor de Inferencia Nativo:",
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(8.dp))
 
-            InferenceBackend.values().forEach { backend ->
-              val isSelected = backend == selectedBackend
+          // 1. Hardware Accelerator Selection (GPU / NPU / CPU)
+          Column {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text(
+                text = "Acelerador de Hardware (GPU / NPU / CPU):",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+
+            HardwareAccelerator.values().forEach { accelerator ->
+              val isSelected = accelerator == selectedAccelerator
               Card(
                 modifier = Modifier
                   .fillMaxWidth()
-                  .padding(vertical = 4.dp)
+                  .padding(vertical = 3.5.dp)
                   .clip(RoundedCornerShape(12.dp))
                   .border(
                     width = if (isSelected) 1.5.dp else 0.5.dp,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
                     shape = RoundedCornerShape(12.dp)
                   )
-                  .clickable { selectedBackend = backend }
-                  .testTag("backend_option_${backend.name}"),
+                  .clickable { selectedAccelerator = accelerator }
+                  .testTag("accelerator_option_${accelerator.name}"),
                 colors = CardDefaults.cardColors(
                   containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                   else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -183,6 +200,182 @@ fun ParametersDialog(
                   modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                      Icon(
+                        imageVector = when (accelerator) {
+                          HardwareAccelerator.AUTO -> Icons.Default.Bolt
+                          HardwareAccelerator.GPU -> Icons.Default.Speed
+                          HardwareAccelerator.NPU -> Icons.Default.DeveloperBoard
+                          HardwareAccelerator.CPU -> Icons.Default.Memory
+                        },
+                        contentDescription = null,
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                      )
+                      Spacer(modifier = Modifier.width(6.dp))
+                      Text(
+                        text = accelerator.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                      )
+                      Spacer(modifier = Modifier.width(6.dp))
+                      Box(
+                        modifier = Modifier
+                          .clip(RoundedCornerShape(4.dp))
+                          .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                          .padding(horizontal = 6.dp, vertical = 2.dp)
+                      ) {
+                        Text(
+                          text = accelerator.badge,
+                          style = MaterialTheme.typography.labelSmall,
+                          color = MaterialTheme.colorScheme.primary,
+                          fontWeight = FontWeight.Bold,
+                          fontSize = 9.sp
+                        )
+                      }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                      text = accelerator.techDescription,
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      fontSize = 11.5.sp
+                    )
+                  }
+
+                  Spacer(modifier = Modifier.width(8.dp))
+
+                  Icon(
+                    imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Outlined.Circle,
+                    contentDescription = null,
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(20.dp)
+                  )
+                }
+              }
+            }
+          }
+
+          // 2. Mmap Optimization Toggle Card
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(14.dp))
+              .border(
+                width = if (useMmap) 1.dp else 0.5.dp,
+                color = if (useMmap) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(14.dp)
+              )
+              .clickable { useMmap = !useMmap }
+              .testTag("mmap_toggle_card"),
+            colors = CardDefaults.cardColors(
+              containerColor = if (useMmap) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f)
+              else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            )
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(
+                    imageVector = Icons.Default.Storage,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(18.dp)
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text(
+                    text = "Mapeo de memoria optimizado (mmap)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                  text = "Carga perezosa de los pesos desde el almacenamiento flash a memoria virtual. Reduce drásticamente el uso de RAM física hasta un 65% en teléfonos de 3-4 GB.",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  fontSize = 11.5.sp,
+                  lineHeight = 16.sp
+                )
+              }
+
+              Spacer(modifier = Modifier.width(8.dp))
+
+              Switch(
+                checked = useMmap,
+                onCheckedChange = { useMmap = it },
+                colors = SwitchDefaults.colors(
+                  checkedThumbColor = MaterialTheme.colorScheme.tertiary,
+                  checkedTrackColor = MaterialTheme.colorScheme.tertiaryContainer
+                ),
+                modifier = Modifier.testTag("mmap_switch")
+              )
+            }
+          }
+
+          // 3. Context Window Slider
+          ParameterCard(
+            title = "Ventana de Contexto: $contextWindow tokens",
+            description = "Límite máximo de memoria de la conversación para recordar mensajes previos."
+          ) {
+            Slider(
+              value = contextWindow.toFloat(),
+              onValueChange = { contextWindow = it.roundToInt() },
+              valueRange = 512f..8192f,
+              steps = 14,
+              colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary
+              ),
+              modifier = Modifier.testTag("context_window_slider")
+            )
+          }
+
+          // 4. Native Backend Selection
+          Column {
+            Text(
+              text = "Framework de Inferencia Base:",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            InferenceBackend.values().forEach { backend ->
+              val isSelected = backend == selectedBackend
+              Card(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(vertical = 3.dp)
+                  .clip(RoundedCornerShape(12.dp))
+                  .border(
+                    width = if (isSelected) 1.5.dp else 0.5.dp,
+                    color = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                    shape = RoundedCornerShape(12.dp)
+                  )
+                  .clickable { selectedBackend = backend }
+                  .testTag("backend_option_${backend.name}"),
+                colors = CardDefaults.cardColors(
+                  containerColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+                  else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                )
+              ) {
+                Row(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
                   verticalAlignment = Alignment.CenterVertically,
                   horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -199,7 +392,7 @@ fun ParametersDialog(
                         modifier = Modifier
                           .clip(RoundedCornerShape(4.dp))
                           .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f))
-                          .padding(horizontal = 6.dp, vertical = 2.dp)
+                          .padding(horizontal = 5.dp, vertical = 1.dp)
                       ) {
                         Text(
                           text = backend.badge,
@@ -210,12 +403,11 @@ fun ParametersDialog(
                         )
                       }
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                       text = backend.techDescription,
                       style = MaterialTheme.typography.bodySmall,
                       color = MaterialTheme.colorScheme.onSurfaceVariant,
-                      fontSize = 11.5.sp
+                      fontSize = 11.sp
                     )
                   }
 
@@ -224,8 +416,8 @@ fun ParametersDialog(
                   Icon(
                     imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Outlined.Circle,
                     contentDescription = null,
-                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(20.dp)
+                    tint = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(18.dp)
                   )
                 }
               }
@@ -246,17 +438,13 @@ fun ParametersDialog(
               onValueChange = { temperature = it },
               valueRange = 0.0f..1.5f,
               steps = 14,
-              colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary
-              ),
               modifier = Modifier.testTag("temperature_slider")
             )
           }
 
           // Max Tokens Slider
           ParameterCard(
-            title = "Longitud Máxima: $maxTokens tokens",
+            title = "Longitud Máxima de Respuesta: $maxTokens tokens",
             description = "Límite de palabras generadas por respuesta (~${(maxTokens * 0.75).toInt()} palabras)"
           ) {
             Slider(
@@ -275,7 +463,7 @@ fun ParametersDialog(
           // CPU Threads Slider
           ParameterCard(
             title = "Hilos de CPU Android: $cpuThreads núcleos",
-            description = "Núcleos del procesador asignados al cálculo de tensores locales"
+            description = "Núcleos del procesador asignados al cálculo en modo CPU"
           ) {
             Slider(
               value = cpuThreads.toFloat(),
@@ -292,7 +480,7 @@ fun ParametersDialog(
 
           // Top-P Slider
           ParameterCard(
-            title = "Top-P (Nucleus): ${((topP * 100).roundToInt() / 100.0)}",
+            title = "Top-P (Nucleus Sampling): ${((topP * 100).roundToInt() / 100.0)}",
             description = "Filtra la probabilidad acumulada de los tokens candidatos"
           ) {
             Slider(
@@ -351,7 +539,10 @@ fun ParametersDialog(
           OutlinedButton(
             onClick = {
               onReset()
+              selectedAccelerator = HardwareAccelerator.AUTO
               selectedBackend = InferenceBackend.CPP_LLAMA
+              useMmap = true
+              contextWindow = 4096
               temperature = 0.7f
               topP = 0.90f
               topK = 40
@@ -377,7 +568,10 @@ fun ParametersDialog(
           Button(
             onClick = {
               val updated = currentParameters.copy(
+                accelerator = selectedAccelerator,
                 backend = selectedBackend,
+                useMmap = useMmap,
+                contextWindow = contextWindow,
                 temperature = ((temperature * 100).roundToInt() / 100.0f),
                 topP = ((topP * 100).roundToInt() / 100.0f),
                 topK = topK,

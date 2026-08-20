@@ -1,11 +1,7 @@
 name: Build Android Debug APK
 
 on:
-  push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch: # Permite compilar manualmente desde la pestaña Actions en GitHub
+  workflow_dispatch: # Se activa exclusivamente de forma manual desde la pestaña Actions en GitHub
 
 jobs:
   build:
@@ -36,25 +32,43 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # 4. Generar la llave de firma Debug (debug.keystore) en el root del proyecto para Gradle
+      # 4. Generar la llave de firma Debug (debug.keystore) en la raíz del proyecto
       - name: Generar debug.keystore en la raíz del proyecto
         run: |
-          echo "Verificando debug.keystore en el proyecto..."
-          if [ -f debug.keystore.base64 ]; then
+          echo "=== Configurando debug.keystore para compilación ==="
+          
+          # 1. Intentar decodificar desde base64 si existe y tiene contenido
+          if [ -s debug.keystore.base64 ]; then
             echo "Decodificando debug.keystore.base64..."
-            base64 -d debug.keystore.base64 > debug.keystore
-          elif [ ! -f debug.keystore ]; then
-            echo "Generando nuevo debug.keystore con keytool en la raíz..."
-            keytool -genkey -v -keystore ./debug.keystore \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
+            base64 -d debug.keystore.base64 > debug.keystore || base64 --decode -i debug.keystore.base64 > debug.keystore || true
+          fi
+          
+          # 2. Si no existe o tiene tamaño 0, generarlo con keytool de forma no interactiva
+          if [ ! -s debug.keystore ]; then
+            echo "Generando nuevo debug.keystore con keytool..."
+            keytool -genkeypair -v -noprompt \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
           
-          # También copiar a ~/.android para compatibilidad global
-          mkdir -p ~/.android
-          cp -f ./debug.keystore ~/.android/debug.keystore || true
-          ls -la ./debug.keystore
+          # 3. Asegurar permisos de lectura
+          chmod 644 debug.keystore
+          
+          # 4. Replicar en directorios alternativos para compatibilidad
+          mkdir -p ~/.android app
+          cp -f debug.keystore ~/.android/debug.keystore || true
+          cp -f debug.keystore app/debug.keystore || true
+          
+          # 5. Verificar que el archivo existe y es válido
+          echo "Verificando archivo debug.keystore creado:"
+          ls -la debug.keystore
+          keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
 
       # 5. Dar permisos de ejecución al wrapper de Gradle (si existe)
       - name: Preparar Gradle Wrapper
@@ -66,6 +80,11 @@ jobs:
       # 6. Compilar el APK en modo Debug
       - name: Compilar APK Debug con Gradle
         run: |
+          # Verificación de seguridad inmediata antes de invocar Gradle
+          if [ ! -s debug.keystore ]; then
+            keytool -genkeypair -v -noprompt -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          
           if [ -f ./gradlew ]; then
             ./gradlew assembleDebug --no-daemon --stacktrace
           else

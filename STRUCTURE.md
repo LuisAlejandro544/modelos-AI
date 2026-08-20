@@ -1,68 +1,52 @@
-# Estructura del Proyecto AI Local
+# 📂 Estructura del Proyecto
 
-Este documento detalla la organización de carpetas, módulos de código, capas nativas y arquitectura del proyecto.
-
----
-
-## 📂 Árbol de Archivos Principal
+Organización modular del código fuente de la aplicación Android.
 
 ```
-AI_Local/
+/
+├── .github/workflows/
+│   ├── build-apk.yml               # Workflow de GitHub Actions para compilar APK
+│   └── override-commit.yml         # Workflow de GitHub Actions para sincronizar mensaje de commit
 ├── app/
-│   ├── build.gradle.kts                   # Configuración del módulo Android y dependencias
+│   ├── build.gradle.kts            # Configuración de dependencias y NDK/CMake
 │   ├── src/
 │   │   ├── main/
-│   │   │   ├── AndroidManifest.xml        # Manifiesto de Android (Permisos, Application, Activity)
-│   │   │   ├── cpp/                       # ─── Capa Nativa C++ (llama.cpp / NDK) ───
-│   │   │   │   ├── CMakeLists.txt         # Configuración CMake para compilar la librería compartida
-│   │   │   │   └── local_ai_engine.cpp    # Métodos JNI (ARM NEON, contexto, tensores, evaluación)
-│   │   │   ├── rust/                      # ─── Capa Nativa Rust (Candle / UniFFI) ───
-│   │   │   │   ├── Cargo.toml             # Manifiesto Cargo con optimizaciones cdylib y LTO
-│   │   │   │   └── src/
-│   │   │   │       └── lib.rs             # Implementación Rust con seguridad de memoria y JNI
+│   │   │   ├── AndroidManifest.xml
+│   │   │   ├── cpp/                # Motor nativo C++ (llama.cpp NDK)
+│   │   │   │   ├── CMakeLists.txt
+│   │   │   │   └── local_ai_engine.cpp
+│   │   │   ├── rust/               # Motor nativo Rust (Candle)
+│   │   │   │   ├── Cargo.toml
+│   │   │   │   └── src/lib.rs
 │   │   │   ├── java/com/example/
-│   │   │   │   ├── MainActivity.kt        # Entrada principal, Scaffold, transición de pantallas y diálogos
-│   │   │   │   ├── engine/                # Motores de inferencia y puentes JNI
-│   │   │   │   │   ├── LocalInferenceEngine.kt   # Orquestador reactivo de generación y streaming
-│   │   │   │   │   ├── NativeCppBridge.kt         # Puente JNI a liblocal_ai_cpp.so
-│   │   │   │   │   └── RustInferenceBridge.kt     # Puente JNI a liblocal_ai_rust.so
-│   │   │   │   ├── model/                 # Modelos de dominio y datos
-│   │   │   │   │   ├── ChatMessage.kt            # Mensajes, roles (User/Assistant) y métricas
-│   │   │   │   │   ├── InferenceParameters.kt    # Parámetros (backend, temperatura, top-p, hilos)
-│   │   │   │   │   └── LocalModel.kt             # Definición de modelos, formatos (GGUF/SafeTensors) y presets
-│   │   │   │   ├── ui/                    # Capa de presentación (Jetpack Compose M3)
-│   │   │   │   │   ├── chat/                     # Pantalla de chat y burbujas de mensajes
-│   │   │   │   │   │   └── ChatScreen.kt
-│   │   │   │   │   ├── dialogs/                  # Diálogos modales
-│   │   │   │   │   │   ├── ImportModelDialog.kt  # Selector e importador de archivos .gguf y .safetensors
-│   │   │   │   │   │   ├── ModelSelectorDialog.kt# Lista de modelos propios y preconfigurados
-│   │   │   │   │   │   ├── ParametersDialog.kt   # Ajuste de temperatura, CPU threads, backend
-│   │   │   │   │   │   └── TokenizerGuideDialog.kt# Guía explicativa sobre tokenizers y Hugging Face
-│   │   │   │   │   ├── theme/                    # Sistema de diseño y temas Material 3
-│   │   │   │   │   │   ├── Color.kt
-│   │   │   │   │   │   ├── Theme.kt
-│   │   │   │   │   │   └── Type.kt
-│   │   │   │   │   └── welcome/                  # Pantalla inicial de bienvenida y diagnósticos
-│   │   │   │   │       └── WelcomeScreen.kt
-│   │   │   │   └── viewmodel/             # Gestión de estado (MVVM)
-│   │   │   │       └── ChatViewModel.kt          # StateFlow reactivo, importación y streaming
-│   │   │   └── res/                       # Recursos XML, drawables, cadenas e iconos
-│   │   └── test/                          # Tests unitarios locales y pruebas Robolectric
-│   │       └── java/com/example/
-│   │           ├── ExampleRobolectricTest.kt
-│   │           └── GreetingScreenshotTest.kt
-├── README.md                              # Documentación general del proyecto
-├── ROADMAP.md                             # Hitos y visión de desarrollo
-├── STRUCTURE.md                           # Estructura del código y archivos
-├── AI_CONTEXT.md                          # Contexto técnico para modelos y asistentes AI
-└── AGENTS.md                              # Reglas y directivas de desarrollo para agentes
+│   │   │   │   ├── MainActivity.kt # Actividad principal y navegación Compose
+│   │   │   │   ├── engine/
+│   │   │   │   │   ├── LocalInferenceEngine.kt   # Gestor de inferencia, fallback GPU/NPU y streaming t/s
+│   │   │   │   │   ├── NativeCppBridge.kt        # JNI C++ (llama.cpp, NEON, Vulkan, mmap)
+│   │   │   │   │   └── RustInferenceBridge.kt    # JNI Rust (Candle, memoria segura)
+│   │   │   │   ├── model/
+│   │   │   │   │   ├── ChatMessage.kt            # Mensajes con métricas y estado en vivo
+│   │   │   │   │   ├── InferenceParameters.kt    # HardwareAccelerator, mmap, contexto y parámetros
+│   │   │   │   │   └── LocalModel.kt             # Definición de modelos GGUF/SafeTensors y presets
+│   │   │   │   ├── ui/
+│   │   │   │   │   ├── chat/
+│   │   │   │   │   │   └── ChatScreen.kt         # Pantalla de chat, medidor de tokens, barra de contexto y t/s
+│   │   │   │   │   ├── dialogs/
+│   │   │   │   │   │   ├── ImportModelDialog.kt  # Diálogo de importación de modelos de usuario
+│   │   │   │   │   │   ├── ModelSelectorDialog.kt# Selector de modelos
+│   │   │   │   │   │   ├── ParametersDialog.kt   # Selector GPU/NPU/CPU, toggle mmap, contexto y sliders
+│   │   │   │   │   │   └── TokenizerGuideDialog.kt# Guía de compatibilidad de tokenizadores
+│   │   │   │   │   ├── theme/                    # Colores, tipografía y tema Material 3
+│   │   │   │   │   └── welcome/
+│   │   │   │   │       └── WelcomeScreen.kt      # Pantalla inicial con specs de hardware y aceleración
+│   │   │   │   └── viewmodel/
+│   │   │   │       └── ChatViewModel.kt          # Gestión de estado, cálculo de tokens y corrutinas
+│   │   │   └── res/                              # Drawables, mipmaps, strings y temas XML
+│   │   └── test/                                 # Tests Robolectric y Roborazzi
+├── AGENTS.md                       # Directivas obligatorias para agentes de IA
+├── AI_CONTEXT.md                   # Resumen técnico y arquitectura para agentes
+├── commit_message.txt              # Mensaje descriptivo para el commit automático
+├── README.md                       # Documentación principal del proyecto
+├── ROADMAP.md                      # Plan de ruta y fases del proyecto
+└── STRUCTURE.md                    # Este archivo
 ```
-
----
-
-## 🏛️ Patrón Arquitectónico
-
-- **Patrón Principal:** **MVVM (Model-View-ViewModel)** con flujo unidireccional de datos (**UDF**).
-- **Flujo de Estado:** `StateFlow<ChatUiState>` en `ChatViewModel` consumido mediante `collectAsStateWithLifecycle()` en Compose.
-- **Flujo de Inferencia:** `Flow<StreamChunk>` emitido por `LocalInferenceEngine` hacia la UI para renderizado token a token en tiempo real.
-- **Capa Nativa:** Enlace dinámico mediante `System.loadLibrary()` con envoltorios seguros en Kotlin que gestionan excepciones `UnsatisfiedLinkError` para evitar cierres inesperados.

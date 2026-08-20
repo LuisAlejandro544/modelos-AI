@@ -20,10 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
@@ -143,7 +144,7 @@ fun WelcomeScreen(
       Spacer(modifier = Modifier.height(6.dp))
 
       Text(
-        text = "Ejecuta modelos de lenguaje directamente en tu teléfono Android. Tus conversaciones jamás salen de tu dispositivo.",
+        text = "Ejecuta modelos de lenguaje directamente en tu teléfono Android. Aceleración por GPU/NPU/CPU y carga optimizada mmap.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
@@ -184,7 +185,7 @@ fun WelcomeScreen(
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-              text = "Estado del Sistema Android",
+              text = "Aceleración de Hardware del Dispositivo",
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
@@ -202,12 +203,12 @@ fun WelcomeScreen(
               value = "${systemSpecs.availableCores} núcleos CPU"
             )
             SystemStatItem(
-              label = "Memoria Lógica",
-              value = "${systemSpecs.totalMemoryMb} MB disp."
+              label = "Acelerador",
+              value = if (systemSpecs.hasNpu) "NPU Activa" else "GPU (Vulkan)"
             )
             SystemStatItem(
-              label = "Inferencia",
-              value = "CPU Local"
+              label = "Mapeo Flash",
+              value = "mmap ON"
             )
           }
         }
@@ -317,7 +318,7 @@ fun WelcomeScreen(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-          text = "Configurar Parámetros (Temperatura, Hilos, Tokens)",
+          text = "Ajustar GPU/NPU, mmap, Contexto y Parámetros",
           style = MaterialTheme.typography.bodyMedium,
           fontWeight = FontWeight.Medium
         )

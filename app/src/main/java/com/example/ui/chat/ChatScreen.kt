@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -34,21 +33,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -85,6 +85,11 @@ fun ChatScreen(
   parameters: InferenceParameters,
   messages: List<ChatMessage>,
   isGenerating: Boolean,
+  liveTokensPerSec: Double?,
+  liveHardwareInfo: String,
+  approximateTokens: Int,
+  contextLimit: Int,
+  contextPercentage: Float,
   showClearDialog: Boolean,
   onSendMessage: (String) -> Unit,
   onStopGeneration: () -> Unit,
@@ -112,92 +117,189 @@ fun ChatScreen(
       .fillMaxSize()
       .testTag("chat_screen"),
     topBar = {
-      TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(
-          containerColor = MaterialTheme.colorScheme.surface,
-          titleContentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        navigationIcon = {
-          IconButton(
-            onClick = onBackClick,
-            modifier = Modifier.testTag("chat_back_button")
-          ) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Volver a bienvenida",
-              tint = MaterialTheme.colorScheme.onSurface
-            )
-          }
-        },
-        title = {
-          // Clickable Model Chip
-          Row(
-            modifier = Modifier
-              .clip(RoundedCornerShape(12.dp))
-              .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-              .clickable(onClick = onOpenModelSelector)
-              .padding(horizontal = 10.dp, vertical = 6.dp)
-              .testTag("active_model_chip"),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Icon(
-              imageVector = Icons.Default.Memory,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Column {
-              Row(verticalAlignment = Alignment.CenterVertically) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .background(MaterialTheme.colorScheme.surface)
+      ) {
+        TopAppBar(
+          colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+          ),
+          navigationIcon = {
+            IconButton(
+              onClick = onBackClick,
+              modifier = Modifier.testTag("chat_back_button")
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Volver a bienvenida",
+                tint = MaterialTheme.colorScheme.onSurface
+              )
+            }
+          },
+          title = {
+            // Clickable Model Chip
+            Row(
+              modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                .clickable(onClick = onOpenModelSelector)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .testTag("active_model_chip"),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Icon(
+                imageVector = Icons.Default.Memory,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Text(
+                    text = selectedModel.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                  Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Cambiar modelo",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                  )
+                }
                 Text(
-                  text = selectedModel.name,
-                  style = MaterialTheme.typography.titleSmall,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.onSurface
-                )
-                Icon(
-                  imageVector = Icons.Default.KeyboardArrowDown,
-                  contentDescription = "Cambiar modelo",
-                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                  modifier = Modifier.size(16.dp)
+                  text = "${selectedModel.parameterSize} • ${parameters.accelerator.badge} • ${if (parameters.useMmap) "mmap ON" else "RAM"}",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  fontSize = 10.sp
                 )
               }
-              Text(
-                text = "${selectedModel.parameterSize} • ${selectedModel.quantization}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp
+            }
+          },
+          actions = {
+            // Parameters Button
+            IconButton(
+              onClick = onOpenParameters,
+              modifier = Modifier.testTag("chat_parameters_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Tune,
+                contentDescription = "Parámetros de inferencia",
+                tint = MaterialTheme.colorScheme.onSurface
+              )
+            }
+
+            // Clear Chat Button
+            IconButton(
+              onClick = onClearChatRequest,
+              enabled = messages.isNotEmpty() || isGenerating,
+              modifier = Modifier.testTag("chat_clear_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.DeleteOutline,
+                contentDescription = "Limpiar conversación",
+                tint = if (messages.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
               )
             }
           }
-        },
-        actions = {
-          // Parameters Button
-          IconButton(
-            onClick = onOpenParameters,
-            modifier = Modifier.testTag("chat_parameters_button")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Tune,
-              contentDescription = "Parámetros de inferencia",
-              tint = MaterialTheme.colorScheme.onSurface
-            )
-          }
+        )
 
-          // Clear Chat Button
-          IconButton(
-            onClick = onClearChatRequest,
-            enabled = messages.isNotEmpty() || isGenerating,
-            modifier = Modifier.testTag("chat_clear_button")
-          ) {
-            Icon(
-              imageVector = Icons.Default.DeleteOutline,
-              contentDescription = "Limpiar conversación",
-              tint = if (messages.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        // Context Window Limit & Hardware Accelerator Meter Bar
+        Surface(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 2.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+          shape = RoundedCornerShape(10.dp),
+          border = androidx.compose.foundation.BorderStroke(
+            0.5.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+          )
+        ) {
+          Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  imageVector = Icons.Default.Storage,
+                  contentDescription = null,
+                  tint = if (contextPercentage > 85f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                  text = "Contexto: ~$approximateTokens / $contextLimit tokens (${String.format("%.1f", contextPercentage)}%)",
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = MaterialTheme.colorScheme.onSurface,
+                  fontSize = 10.5.sp
+                )
+              }
+
+              // Hardware Badge with live t/s during generation
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isGenerating && liveTokensPerSec != null) {
+                  Icon(
+                    imageVector = Icons.Default.Bolt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(13.dp)
+                  )
+                  Spacer(modifier = Modifier.width(3.dp))
+                  Text(
+                    text = "$liveTokensPerSec t/s",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontSize = 11.sp
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                }
+
+                Box(
+                  modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                ) {
+                  Text(
+                    text = if (parameters.accelerator.name == "AUTO") "GPU Auto" else parameters.accelerator.badge,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 9.sp
+                  )
+                }
+              }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Context window progress bar
+            LinearProgressIndicator(
+              progress = { (contextPercentage / 100f).coerceIn(0f, 1f) },
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp)),
+              color = when {
+                contextPercentage > 90f -> MaterialTheme.colorScheme.error
+                contextPercentage > 75f -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.primary
+              },
+              trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
           }
         }
-      )
+      }
     },
     bottomBar = {
       Column(
@@ -217,10 +319,10 @@ fun ChatScreen(
           verticalAlignment = Alignment.CenterVertically
         ) {
           Text(
-            text = "Temp: ${parameters.temperature} • Hilos: ${parameters.cpuThreads} • Max: ${parameters.maxTokens} tok",
+            text = "Temp: ${parameters.temperature} • Acelerador: ${parameters.accelerator.badge} • ${if (parameters.useMmap) "mmap ON" else "RAM direct"} • Max: ${parameters.maxTokens} tok",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 10.5.sp
+            fontSize = 10.sp
           )
           Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -235,7 +337,7 @@ fun ChatScreen(
               style = MaterialTheme.typography.labelSmall,
               color = MaterialTheme.colorScheme.tertiary,
               fontWeight = FontWeight.Bold,
-              fontSize = 10.5.sp
+              fontSize = 10.sp
             )
           }
         }
@@ -429,7 +531,7 @@ private fun EmptyChatWelcome(
     Spacer(modifier = Modifier.height(4.dp))
 
     Text(
-      text = "Modelo local en CPU Android • 100% privado y offline",
+      text = "Aceleración GPU/NPU/CPU • mmap optimizado • 100% privado",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -446,10 +548,10 @@ private fun EmptyChatWelcome(
     Spacer(modifier = Modifier.height(10.dp))
 
     val suggestions = listOf(
-      "¿Cómo funciona la IA local sin internet?",
-      "Explica qué es un archivo GGUF y cuantización",
-      "Escribe un poema sobre privacidad digital",
-      "Dame un ejemplo de código en Kotlin para Android"
+      "¿Cómo funciona el mapeo mmap en modelos locales?",
+      "¿Qué diferencia hay entre inferencia por GPU, NPU y CPU?",
+      "¿Cuántos tokens puede procesar este modelo?",
+      "Escribe un script en Kotlin para Android"
     )
 
     Column(
@@ -536,7 +638,7 @@ private fun MessageBubble(
     // Message Card
     Surface(
       modifier = Modifier
-        .widthIn(max = 320.dp)
+        .widthIn(max = 330.dp)
         .clip(
           RoundedCornerShape(
             topStart = 16.dp,
@@ -594,43 +696,74 @@ private fun MessageBubble(
         }
 
         // Metrics and Actions for Assistant Messages
-        if (!isUser && !message.isStreaming && message.content.isNotEmpty()) {
-          Spacer(modifier = Modifier.height(8.dp))
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            message.metrics?.let { metrics ->
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Speed,
-                  contentDescription = null,
-                  tint = MaterialTheme.colorScheme.secondary,
-                  modifier = Modifier.size(11.dp)
-                )
-                Text(
-                  text = "${metrics.backendName} • ${metrics.tokensPerSecond} tok/s • ${metrics.generationTimeMs}ms",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  fontSize = 10.sp
-                )
-              }
-            } ?: Spacer(modifier = Modifier.width(1.dp))
-
-            IconButton(
-              onClick = { onCopy(message.content) },
-              modifier = Modifier.size(24.dp)
+        if (!isUser) {
+          if (message.isStreaming && message.liveTokensPerSec != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
               Icon(
-                imageVector = Icons.Default.ContentCopy,
-                contentDescription = "Copiar respuesta",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(14.dp)
+                imageVector = Icons.Default.Bolt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(11.dp)
               )
+              Text(
+                text = "${message.liveTokensPerSec} tok/s • ${message.liveHardwareInfo ?: "GPU"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp
+              )
+            }
+          } else if (!message.isStreaming && message.content.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              message.metrics?.let { metrics ->
+                Column {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                  ) {
+                    Icon(
+                      imageVector = Icons.Default.Speed,
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.secondary,
+                      modifier = Modifier.size(11.dp)
+                    )
+                    Text(
+                      text = "${metrics.hardwareUsed} • ${metrics.tokensPerSecond} t/s",
+                      style = MaterialTheme.typography.labelSmall,
+                      fontWeight = FontWeight.Bold,
+                      color = MaterialTheme.colorScheme.onSurface,
+                      fontSize = 10.5.sp
+                    )
+                  }
+                  Text(
+                    text = "${metrics.tokensGenerated} tokens en ${metrics.generationTimeMs}ms • ${if (metrics.isMmapEnabled) "mmap ON" else "RAM"} • ${metrics.ramUsageMb} MB",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.5.sp
+                  )
+                }
+              } ?: Spacer(modifier = Modifier.width(1.dp))
+
+              IconButton(
+                onClick = { onCopy(message.content) },
+                modifier = Modifier.size(24.dp)
+              ) {
+                Icon(
+                  imageVector = Icons.Default.ContentCopy,
+                  contentDescription = "Copiar respuesta",
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(14.dp)
+                )
+              }
             }
           }
         }

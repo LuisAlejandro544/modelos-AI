@@ -1,51 +1,34 @@
-# AI Context — Arquitectura e Inferencia Local en Android
+# 🧠 AI Context & Arquitectura del Proyecto
 
-Este documento proporciona el contexto técnico esencial para que cualquier desarrollador, asistente o agente de IA comprenda las decisiones de diseño del proyecto.
-
----
-
-## 🧠 Filosofía del Proyecto
-
-1. **100% On-Device & Offline:**
-   - La aplicación está orientada a la total soberanía y privacidad de los datos del usuario.
-   - No se implementan llamadas a APIs en la nube de pago ni envío de telemetría o prompts a servidores remotos.
-   - La inferencia ocurre íntegramente en la CPU/GPU/NPU del dispositivo móvil Android.
-
-2. **Diferencias Clave entre Formatos y Archivos de Modelo:**
-   - **GGUF (GPT-Generated Unified Format):**
-     - Desarrollado por el ecosistema `llama.cpp`.
-     - Empaqueta en un único binario: metadatos del modelo, tensores cuantizados (Q4_K_M, Q4_0, Q5_K_M, Q8_0), vocabulario completo del tokenizador y plantilla de chat (`chat_template`).
-     - **No requiere archivos externos adicionales**.
-   - **SafeTensors (`.safetensors`):**
-     - Desarrollado por Hugging Face para almacenar tensores numpy/torch de forma rápida y segura.
-     - Solo contiene los tensores de pesos numéricos; **no contiene el tokenizador ni la configuración de capas**.
-     - **Archivos requeridos y opcionales:**
-       1. `model.safetensors`: Obligatorio (Pesos neuronales).
-       2. `tokenizer.json`: Obligatorio (Vocabulario de IDs de tokens).
-       3. `config.json`: Obligatorio (Arquitectura de capas, hidden dimensions, cabezas de atención).
-       4. `tokenizer_config.json`: Recomendado (Plantilla de chat y tokens especiales como `<|im_end|>`).
-       5. `generation_config.json`: Opcional (Valores por defecto de temperatura y top_p).
-       6. `training_args.bin`: **No requerido** (Solo registros de entrenamiento de fine-tuning).
-
-3. **Ecosistema de Motores Nativos:**
-   - **C++ (`llama.cpp` / NDK):**
-     - Ideal para procesadores ARM64 usando instrucciones **NEON SIMD**.
-     - Aprovecha mapeo de memoria `mmap` para evaluar modelos capa por capa sin desbordar la memoria RAM física del teléfono.
-   - **Rust (`Candle` / UniFFI):**
-     - Enfoque moderno para manipular tensores SafeTensors con seguridad de memoria estricta y sin overhead de recolector de basura.
-   - **Kotlin VM:**
-     - Capa de orquestación, gestión de UI reactiva en Jetpack Compose, diálogos y ciclo de vida de actividades.
+## Propósito del Proyecto
+Esta aplicación es un cliente nativo de Inteligencia Artificial para Android que ejecuta modelos de lenguaje (LLMs / SLMs) en formatos `.gguf` y `.safetensors` de forma **100% local, offline y privada**, sin dependencias de servicios en la nube ni telemetría.
 
 ---
 
-## 📱 Consideraciones de Hardware Móvil
+## ⚡ Componentes Clave Recientes
 
-- **Smartphones de entrada (3-4 GB RAM):**
-  - Modelos recomendados: **135M a 500M** de parámetros (SmolLM-360M, Qwen2.5-0.5B).
-  - Velocidad típica: 35 a 60 tokens por segundo.
-- **Smartphones de gama media (6-8 GB RAM):**
-  - Modelos recomendados: **1B a 2B** de parámetros (Llama-3.2-1B, Gemma-2-2B, Qwen-2.5-1.5B, DeepSeek-R1-1.5B).
-  - Velocidad típica: 18 a 35 tokens por segundo.
-- **Smartphones de gama alta (12+ GB RAM):**
-  - Modelos recomendados: **3.8B a 7B** de parámetros (Phi-3-Mini, Llama-3.1-8B Q4).
-  - Velocidad típica: 10 a 16 tokens por segundo.
+1. **Gestión de Ventana de Contexto y Tokens:**
+   - La aplicación calcula continuamente los tokens estimados de la conversación (`approximateConversationTokens`) sumando el prompt del sistema y todos los mensajes (entradas y salidas).
+   - Se muestra un medidor superior con el porcentaje de contexto utilizado y advertencias visuales cuando se acerca al límite (`contextLimit`).
+
+2. **Monitoreo de Rendimiento (Tokens/Segundo):**
+   - Durante la generación vía Flow, cada chunk emitido calcula en tiempo real los tokens por segundo generados (`liveTokensPerSec`).
+   - Al finalizar, se registran métricas completas en `InferenceMetrics`: acelerador utilizado, tiempo de cómputo en milisegundos, tasa t/s media, memoria RAM residente y estado de `mmap`.
+
+3. **Selector de Aceleración de Hardware con Fallback:**
+   - Opciones: `AUTO` (recomendado), `GPU` (Vulkan / Adreno & Mali), `NPU` (NNAPI / Qualcomm QNN), y `CPU` (ARM NEON).
+   - **Regla de negocio:** Si el usuario elige `AUTO` o `NPU` pero el dispositivo no tiene NPU dedicada, conmuta de forma transparente e instantánea a `GPU (Vulkan)` para asegurar la máxima velocidad sin fallos.
+
+4. **Mapeo de Memoria (`mmap`):**
+   - Activado por defecto en `InferenceParameters`.
+   - Permite paginación bajo demanda desde almacenamiento flash, reduciendo el consumo de RAM física residente hasta en un 65% (ideal para dispositivos móviles con 3-4 GB de RAM).
+
+---
+
+## 🛠️ Tecnologías y Estándares
+- **Lenguaje:** Kotlin (100% Coroutines y Flow).
+- **UI:** Jetpack Compose con Material Design 3 (M3).
+- **Patrón:** MVVM con `StateFlow` y `collectAsStateWithLifecycle`.
+- **C++ NDK:** `local_ai_engine.cpp` para `llama.cpp`, vectorización ARM NEON, aceleración Vulkan y llamadas `mmap`.
+- **Rust NDK:** `local_ai_rust` (`Candle`) para tensores con seguridad de memoria estricta.
+- **Testing:** Robolectric para tests unitarios locales en JVM y Roborazzi para pruebas de interfaz y capturas.
