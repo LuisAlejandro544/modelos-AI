@@ -21,6 +21,7 @@ import com.example.ui.dialogs.ImportModelDialog
 import com.example.ui.dialogs.ModelSelectorDialog
 import com.example.ui.dialogs.ParametersDialog
 import com.example.ui.dialogs.TokenizerGuideDialog
+import com.example.ui.safetensors.SafeTensorsImportScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.welcome.WelcomeScreen
 import com.example.viewmodel.ChatViewModel
@@ -57,9 +58,32 @@ fun LocalAiApp(viewModel: ChatViewModel) {
           WelcomeScreen(
             selectedModel = state.selectedModel,
             systemSpecs = state.systemSpecs,
+            onSelectGgufFile = { uri -> viewModel.loadGgufModelDirect(uri) },
+            onOpenSafeTensorsFlow = { viewModel.navigateTo(CurrentScreen.IMPORT_SAFETENSORS) },
             onStartChatClick = { viewModel.navigateTo(CurrentScreen.CHAT) },
             onChangeModelClick = { viewModel.showModelSelector(true) },
-            onOpenParametersClick = { viewModel.showParameters(true) }
+            onOpenParametersClick = { viewModel.showParameters(true) },
+            onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) }
+          )
+        }
+
+        CurrentScreen.IMPORT_SAFETENSORS -> {
+          SafeTensorsImportScreen(
+            onStartChat = { name, weights, tokenizer, config, tokConfig, genConfig, paramSize, quant, prompt ->
+              viewModel.importSafeTensorsBundle(
+                modelName = name,
+                weightsUri = weights,
+                tokenizerUri = tokenizer,
+                configUri = config,
+                tokenizerConfigUri = tokConfig,
+                generationConfigUri = genConfig,
+                paramSize = paramSize,
+                quantization = quant,
+                customPrompt = prompt
+              )
+            },
+            onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) },
+            onBackClick = { viewModel.navigateTo(CurrentScreen.WELCOME) }
           )
         }
 
@@ -131,3 +155,4 @@ fun LocalAiApp(viewModel: ChatViewModel) {
     )
   }
 }
+

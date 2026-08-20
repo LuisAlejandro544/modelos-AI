@@ -54,7 +54,7 @@ import com.example.model.ModelFormatType
 
 @Composable
 fun ModelSelectorDialog(
-  selectedModel: LocalAiModel,
+  selectedModel: LocalAiModel?,
   allModels: List<LocalAiModel>,
   onModelSelected: (LocalAiModel) -> Unit,
   onOpenImportDialog: () -> Unit,
@@ -152,7 +152,7 @@ fun ModelSelectorDialog(
               modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Importar GGUF / SafeTensors", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+            Text("Importar Modelo", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
           }
 
           OutlinedButton(
@@ -169,7 +169,7 @@ fun ModelSelectorDialog(
               modifier = Modifier.size(15.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Guía Tokenizer", fontSize = 12.sp)
+            Text("Guía Formatos", fontSize = 12.sp)
           }
         }
 
@@ -182,44 +182,51 @@ fun ModelSelectorDialog(
             .weight(1f, fill = false),
           verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-          val customModels = allModels.filter { it.isUserImported }
-          val presetModels = allModels.filter { !it.isUserImported }
-
-          if (customModels.isNotEmpty()) {
+          if (allModels.isEmpty()) {
             item {
-              Text(
-                text = "Tus Modelos Importados (${customModels.size}):",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-              )
+              Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                  containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                )
+              ) {
+                Column(
+                  modifier = Modifier.padding(20.dp),
+                  horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                  Icon(
+                    imageVector = Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(32.dp)
+                  )
+                  Spacer(modifier = Modifier.height(8.dp))
+                  Text(
+                    text = "No tienes modelos importados",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                  Spacer(modifier = Modifier.height(4.dp))
+                  Text(
+                    text = "Selecciona un archivo .gguf o configura tu paquete SafeTensors para comenzar.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                  )
+                }
+              }
             }
-            items(customModels, key = { it.id }) { model ->
+          } else {
+            items(allModels, key = { it.id }) { model ->
               ModelCardItem(
                 model = model,
-                isSelected = model.id == selectedModel.id,
+                isSelected = model.id == selectedModel?.id,
                 onClick = { onModelSelected(model) },
                 onDelete = { onDeleteCustomModel(model.id) }
               )
             }
-            item {
-              Spacer(modifier = Modifier.height(4.dp))
-              Text(
-                text = "Modelos Preconfigurados Optimizados:",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
-          }
-
-          items(presetModels, key = { it.id }) { model ->
-            ModelCardItem(
-              model = model,
-              isSelected = model.id == selectedModel.id,
-              onClick = { onModelSelected(model) },
-              onDelete = null
-            )
           }
         }
       }

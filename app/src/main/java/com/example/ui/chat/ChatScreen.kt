@@ -81,7 +81,7 @@ import com.example.model.LocalAiModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-  selectedModel: LocalAiModel,
+  selectedModel: LocalAiModel?,
   parameters: InferenceParameters,
   messages: List<ChatMessage>,
   isGenerating: Boolean,
@@ -160,7 +160,7 @@ fun ChatScreen(
               Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                   Text(
-                    text = selectedModel.name,
+                    text = selectedModel?.name ?: "Sin modelo cargado",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -173,7 +173,7 @@ fun ChatScreen(
                   )
                 }
                 Text(
-                  text = "${selectedModel.parameterSize} • ${parameters.accelerator.badge} • ${if (parameters.useMmap) "mmap ON" else "RAM"}",
+                  text = "${selectedModel?.parameterSize ?: "Auto"} • ${parameters.accelerator.badge} • ${if (parameters.useMmap) "mmap ON" else "RAM"}",
                   style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                   fontSize = 10.sp
@@ -354,7 +354,7 @@ fun ChatScreen(
             onValueChange = { inputText = it },
             placeholder = {
               Text(
-                text = "Pregunta a ${selectedModel.name.split(" ").firstOrNull() ?: "la IA"}...",
+                text = "Pregunta a ${selectedModel?.name?.split(" ")?.firstOrNull() ?: "la IA"}...",
                 style = MaterialTheme.typography.bodyMedium,
                 fontSize = 14.sp
               )
@@ -494,7 +494,7 @@ fun ChatScreen(
 
 @Composable
 private fun EmptyChatWelcome(
-  model: LocalAiModel,
+  model: LocalAiModel?,
   onPromptClick: (String) -> Unit
 ) {
   Column(
@@ -522,7 +522,7 @@ private fun EmptyChatWelcome(
     Spacer(modifier = Modifier.height(14.dp))
 
     Text(
-      text = "Listo para chatear con ${model.name}",
+      text = if (model != null) "Listo para chatear con ${model.name}" else "Inicia una conversación",
       style = MaterialTheme.typography.titleMedium,
       fontWeight = FontWeight.Bold,
       color = MaterialTheme.colorScheme.onBackground

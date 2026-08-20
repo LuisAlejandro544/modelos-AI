@@ -1,8 +1,8 @@
-feat(engine): contador de tokens, velocidad t/s, acelerador GPU/NPU/CPU y mmap
+feat(models): implementacion de modos GGUF directo y SafeTensors modular
 
-- Añadido contador de tokens y medidor de ventana de contexto en tiempo real.
-- Integrado velocímetro de tokens por segundo (t/s) en vivo durante la inferencia y métricas finales.
-- Implementado selector de acelerador de hardware (GPU Vulkan / NPU NNAPI / CPU ARM NEON) con fallback automático a GPU si no se detecta NPU.
-- Habilitada optimización de mapeo de memoria (mmap) para carga perezosa de modelos y reducción de uso de RAM física hasta 65%.
-- Corregida compatibilidad de compilación en GitHub Actions configurando Gradle oficial 9.3.1 y Java 17.
-- Actualizada documentación técnica en README, ROADMAP, STRUCTURE y AI_CONTEXT.
+- Eliminados modelos simulados/preconfigurados para garantizar ejecucion 100% local y offline con archivos propios del usuario.
+- Implementado Modo GGUF (.gguf): seleccion rapida de un solo archivo autocontenido para inicio instantaneo con llama.cpp.
+- Implementado Modo SafeTensors (.safetensors): nueva pantalla dedicada para seleccionar por separado los pesos (.safetensors), el tokenizador (tokenizer.json), la configuracion (config.json) y archivos auxiliares opcionales antes de iniciar la conversacion con el motor Rust (Candle).
+- Actualizado WelcomeScreen con selector de modos interactivo y gestion de modelos en memoria.
+- Refactorizado ChatViewModel y ChatScreen para soportar seleccion modular de backend de inferencia y metadatos dinamicos.
+- Actualizada documentacion del proyecto (README.md, ROADMAP.md, AI_CONTEXT.md) reflejando la nueva arquitectura.
