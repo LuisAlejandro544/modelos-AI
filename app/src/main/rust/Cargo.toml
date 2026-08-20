@@ -3,13 +3,20 @@ name = "local_ai_rust"
 version = "0.1.0"
 edition = "2021"
 authors = ["AI Local Developer"]
-description = "High-performance safe memory Rust inference engine for local AI on Android"
+description = "Hugging Face Candle native inference engine for SafeTensors LLMs on Android"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# JNI bindings for communication between Android Kotlin and Rust
+candle-core = { version = "0.8.2", default-features = false }
+candle-transformers = { version = "0.8.2", default-features = false }
+candle-nn = { version = "0.8.2", default-features = false }
+tokenizers = { version = "0.21.0", default-features = false, features = ["unstable_wasm"] }
+safetensors = "0.4.5"
+memmap2 = "0.9.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 jni = { version = "0.21", default-features = false }
 log = "0.4"
 android_logger = "0.13"

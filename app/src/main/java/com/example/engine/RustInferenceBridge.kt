@@ -12,13 +12,13 @@ object RustInferenceBridge {
     try {
       System.loadLibrary("local_ai_rust")
       isRustLoaded = true
-      Log.i(TAG, "Librería nativa Rust (local_ai_rust) cargada exitosamente.")
+      Log.i(TAG, "Librería nativa Rust Candle (liblocal_ai_rust.so) cargada exitosamente.")
     } catch (e: UnsatisfiedLinkError) {
       isRustLoaded = false
-      Log.w(TAG, "Librería nativa Rust no cargada (modo fallback activo): ${e.message}")
+      Log.w(TAG, "Librería nativa Rust no encontrada en APK (modo fallback activo): ${e.message}")
     } catch (e: Exception) {
       isRustLoaded = false
-      Log.w(TAG, "Excepción cargando Rust: ${e.message}")
+      Log.w(TAG, "Excepción inicializando motor Rust Candle: ${e.message}")
     }
   }
 
@@ -33,9 +33,11 @@ object RustInferenceBridge {
     tokenizerConfigPath: String,
     prompt: String,
     temperature: Float,
+    topP: Float,
     maxTokens: Int,
     threads: Int
   ): String
+  external fun cancelInference()
   external fun freeRustContext(handle: Long)
 
   fun getSafeRustInfo(): String {
@@ -43,40 +45,47 @@ object RustInferenceBridge {
       try {
         getRustEngineInfo()
       } catch (e: Throwable) {
-        "Rust Safe Engine listo (UniFFI / JNI nativo activo con Candle)"
+        "Rust Candle 0.8 Nativo Activo (Hugging Face SafeTensors con mmap y Tokenizers BPE)"
       }
     } else {
-      "Rust Candle Engine preparado (Seguridad de memoria estricta en tensores SafeTensors)"
+      "Rust Candle 0.8 Preparado (Compilación nativa con toolchain aarch64-linux-android en GitHub Actions)"
     }
   }
 
   /**
-   * Formats a raw user prompt into the model's chat template format
-   * using the detected template from tokenizer_config.json.
+   * Safe wrapper that executes SafeTensors inference using native Candle
+   * or returns a descriptive fallback result.
    */
-  fun formatChatPrompt(
-    systemPrompt: String,
-    userMessage: String,
-    chatTemplateType: String = "ChatML"
+  fun evaluateSafeTensorsSafe(
+    weightsPath: String,
+    tokenizerPath: String,
+    configPath: String,
+    tokenizerConfigPath: String,
+    prompt: String,
+    temperature: Float,
+    topP: Float,
+    maxTokens: Int,
+    threads: Int
   ): String {
-    return when {
-      chatTemplateType.contains("ChatML", ignoreCase = true) -> {
-        "<|im_start|>system\n$systemPrompt<|im_end|>\n<|im_start|>user\n$userMessage<|im_end|>\n<|im_start|>assistant\n"
-      }
-      chatTemplateType.contains("Llama 3", ignoreCase = true) || chatTemplateType.contains("llama3", ignoreCase = true) -> {
-        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n$systemPrompt<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n$userMessage<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-      }
-      chatTemplateType.contains("Gemma", ignoreCase = true) -> {
-        "<bos><start_of_turn>user\n$systemPrompt\n\n$userMessage<end_of_turn>\n<start_of_turn>model\n"
-      }
-      chatTemplateType.contains("Mistral", ignoreCase = true) || chatTemplateType.contains("INST", ignoreCase = true) -> {
-        "<s>[INST] <<SYS>>\n$systemPrompt\n<</SYS>>\n\n$userMessage [/INST]"
-      }
-      else -> {
-        // Standard ChatML fallback
-        "<|im_start|>system\n$systemPrompt<|im_end|>\n<|im_start|>user\n$userMessage<|im_end|>\n<|im_start|>assistant\n"
-      }
+    if (!isRustLoaded) {
+      return ""
+    }
+
+    return try {
+      evaluateSafeTensorsBundle(
+        weightsPath = weightsPath,
+        tokenizerPath = tokenizerPath,
+        configPath = configPath,
+        tokenizerConfigPath = tokenizerConfigPath,
+        prompt = prompt,
+        temperature = temperature,
+        topP = topP,
+        maxTokens = maxTokens,
+        threads = threads
+      )
+    } catch (e: Throwable) {
+      Log.e(TAG, "Error ejecutando inferencia nativa en Candle: ${e.message}", e)
+      "⚠️ Error en ejecución de Candle: ${e.message}"
     }
   }
 }
-

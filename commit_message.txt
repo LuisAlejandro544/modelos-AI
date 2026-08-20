@@ -1,9 +1,9 @@
-feat(ui-fix): correccion de espaciados de ventana, insets de teclado y nombres de archivo en chat
+feat(engine): implementacion de motor nativo Hugging Face Candle en Rust para inferencia real de SafeTensors
 
-- Eliminado Scaffold redundante en MainActivity que duplicaba el padding de la barra de estado y generaba un hueco negro superior en ChatScreen y SafeTensorsImportScreen.
-- Corregido el espaciado del teclado virtual (IME) en ChatScreen utilizando WindowInsets.safeDrawing.only(Bottom) para eliminar el espacio vacío inferior al escribir.
-- Agregada resolución de nombres reales de archivo (OpenableColumns.DISPLAY_NAME) en WelcomeScreen para evitar identificadores de almacenamiento crudos como 'msf:...'.
-- Configurado tokenizer_config.json como archivo obligatorio en SafeTensorsImportScreen e ImportModelDialog para garantizar el soporte de plantillas de chat (ChatML, Llama-3, Gemma, Mistral).
-- Implementado parser reactivo de metadatos en JSON para extraer automáticamente tipo de modelo, capas ocultas, parámetros estimados y precisión (F16/BF16) al seleccionar config.json y tokenizer_config.json.
-- Conectado el flujo de generación de SafeTensors al motor nativo Rust (Candle) con formateo de chat templates y cálculo de tokens en tiempo real.
-- Actualizada documentación del proyecto (README.md, ROADMAP.md, AI_CONTEXT.md) reflejando los 4 archivos obligatorios de SafeTensors y la arquitectura de inferencia 100% local y privada.
+- Integrado Hugging Face Candle 0.8 en app/src/main/rust/ (Cargo.toml y lib.rs):
+  * Carga y deserializacion de tensores .safetensors con memoria mapeada (mmap zero-copy).
+  * Carga de tokenizador BPE nativo desde tokenizer.json con el crate tokenizers.
+  * Muestreo autoregresivo con LogitsProcessor (soporte para temperatura y Top-P).
+  * Decodificacion token a token y deteccion de tokens de parada (<|endoftext|>, <|im_end|>, <end_of_turn>, <|eot_id|>).
+- Conectado RustInferenceBridge y LocalInferenceEngine para ejecutar inferencia real de paquetes SafeTensors.
+- Actualizado el workflow de GitHub Actions (.github/workflows/build-apk.yml) con toolchain de Rust (aarch64-linux-android, armeabi-v7a, x86_64) y cargo-ndk para empaquetar liblocal_ai_rust.so en el APK.

@@ -2,6 +2,7 @@ package com.example.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.repository.ModelRepository
 import com.example.engine.LocalInferenceEngine
 import com.example.model.ChatMessage
 import com.example.model.ChatRole
@@ -17,62 +18,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
-import kotlin.math.roundToInt
-
-enum class CurrentScreen {
-  WELCOME,
-  IMPORT_SAFETENSORS,
-  CHAT
-}
-
-data class SystemSpecs(
-  val availableCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(4),
-  val totalMemoryMb: Long = (Runtime.getRuntime().maxMemory() / (1024 * 1024)).coerceAtLeast(1024),
-  val isOfflineModeActive: Boolean = true,
-  val hasGpuVulkan: Boolean = true,
-  val hasNpu: Boolean = false, // Phone without dedicated NPU -> auto-fallback to GPU
-  val storageUsedFormatted: String = "2.4 GB libres"
-)
-
-data class ChatUiState(
-  val currentScreen: CurrentScreen = CurrentScreen.WELCOME,
-  val selectedModel: LocalAiModel? = null,
-  val customModels: List<LocalAiModel> = emptyList(),
-  val parameters: InferenceParameters = InferenceParameters(),
-  val messages: List<ChatMessage> = emptyList(),
-  val isGenerating: Boolean = false,
-  val liveTokensPerSec: Double? = null,
-  val liveHardwareInfo: String = "GPU (Vulkan)",
-  val showModelSelectorDialog: Boolean = false,
-  val showImportDialog: Boolean = false,
-  val showParametersDialog: Boolean = false,
-  val showClearChatDialog: Boolean = false,
-  val showTokenizerGuideDialog: Boolean = false,
-  val systemSpecs: SystemSpecs = SystemSpecs()
-) {
-  val allAvailableModels: List<LocalAiModel>
-    get() = customModels
-
-  /**
-   * Approximate tokens in the entire conversation plus system prompt
-   */
-  val approximateConversationTokens: Int
-    get() {
-      val systemTokens = (parameters.systemPrompt.length / 4.0).roundToInt()
-      val messagesTokens = messages.sumOf { msg ->
-        (msg.content.length / 4.0).coerceAtLeast(1.0).roundToInt()
-      }
-      return systemTokens + messagesTokens
-    }
-
-  val contextLimit: Int
-    get() = parameters.contextWindow.coerceAtMost(selectedModel?.contextLength ?: 4096)
-
-  val contextUsagePercentage: Float
-    get() = (approximateConversationTokens.toFloat() / contextLimit.coerceAtLeast(1) * 100f).coerceIn(0f, 100f)
-}
 
 class ChatViewModel(
+  private val repository: ModelRepository = ModelRepository(),
   private val engine: LocalInferenceEngine = LocalInferenceEngine()
 ) : ViewModel() {
 
@@ -82,6 +30,15 @@ class ChatViewModel(
   private var generationJob: Job? = null
 
   init {
+    // Observe repository custom models
+    viewModelScope.launch {
+      repository.customModels.collect { models ->
+        _uiState.update { state ->
+          state.copy(customModels = models)
+        }
+      }
+    }
+
     _uiState.update {
       it.copy(
         parameters = it.parameters.copy(
@@ -95,6 +52,7 @@ class ChatViewModel(
     }
   }
 
+  // Navigation & Dialog Controls
   fun navigateTo(screen: CurrentScreen) {
     _uiState.update { it.copy(currentScreen = screen) }
   }
@@ -111,10 +69,15 @@ class ChatViewModel(
     _uiState.update { it.copy(showTokenizerGuideDialog = show) }
   }
 
+  fun showImportDialog(show: Boolean) {
+    _uiState.update { it.copy(showImportDialog = show) }
+  }
+
   fun showClearChatConfirm(show: Boolean) {
     _uiState.update { it.copy(showClearChatDialog = show) }
   }
 
+  // Model Management
   fun selectModel(model: LocalAiModel) {
     val recommendedBackend = if (model.formatType == ModelFormatType.SAFETENSORS) {
       InferenceBackend.RUST_CANDLE
@@ -136,31 +99,9 @@ class ChatViewModel(
   }
 
   fun loadGgufModelDirect(uriOrPath: String, displayName: String? = null) {
-    val cleanName = displayName?.ifBlank { null }
-      ?: uriOrPath.substringAfterLast("/").substringBeforeLast(".")
-        .replace("-", " ")
-        .replace("_", " ")
-
-    val newModel = LocalAiModel(
-      id = "gguf-${UUID.randomUUID()}",
-      name = cleanName,
-      developer = "Archivo Local GGUF",
-      parameterSize = "Auto (GGUF)",
-      quantization = "Q4 / Mixto",
-      ramRequired = "Bajo consumo mmap",
-      speedEstimate = "~25-45 tok/s (GPU)",
-      recommendedFor = "Inferencia directa todo en uno (.gguf) con llama.cpp",
-      downloadSize = "Local",
-      formatType = ModelFormatType.GGUF,
-      contextLength = 4096,
-      isUserImported = true,
-      filePathOrUri = uriOrPath,
-      defaultSystemPrompt = "Eres un asistente de IA local ejecutado de forma privada desde tu archivo GGUF."
-    )
-
+    val newModel = repository.addGgufModel(uriOrPath, displayName)
     _uiState.update {
       it.copy(
-        customModels = listOf(newModel) + it.customModels,
         selectedModel = newModel,
         currentScreen = CurrentScreen.CHAT,
         parameters = it.parameters.copy(
@@ -183,31 +124,20 @@ class ChatViewModel(
     quantization: String,
     customPrompt: String
   ) {
-    val cleanName = if (modelName.isNotBlank()) modelName else "Modelo SafeTensors (Candle)"
-    val newModel = LocalAiModel(
-      id = "safetensors-${UUID.randomUUID()}",
-      name = cleanName,
-      developer = "Archivos SafeTensors",
-      parameterSize = paramSize.ifBlank { "Auto" },
-      quantization = quantization.ifBlank { "F16 / BF16" },
-      ramRequired = "Rust Candle optimizado",
-      speedEstimate = "~20-38 tok/s (GPU)",
-      recommendedFor = "Inferencia nativa modular (.safetensors + tokenizer.json + config.json)",
-      downloadSize = "Local",
-      formatType = ModelFormatType.SAFETENSORS,
-      contextLength = 4096,
-      isUserImported = true,
-      filePathOrUri = weightsUri,
-      tokenizerPathOrUri = tokenizerUri,
-      configPathOrUri = configUri,
-      tokenizerConfigPathOrUri = tokenizerConfigUri,
-      generationConfigPathOrUri = generationConfigUri,
-      defaultSystemPrompt = customPrompt.ifBlank { "Eres un asistente de IA ejecutado desde tensores SafeTensors en Rust." }
+    val newModel = repository.addSafeTensorsBundle(
+      modelName = modelName,
+      weightsUri = weightsUri,
+      tokenizerUri = tokenizerUri,
+      configUri = configUri,
+      tokenizerConfigUri = tokenizerConfigUri,
+      generationConfigUri = generationConfigUri,
+      paramSize = paramSize,
+      quantization = quantization,
+      customPrompt = customPrompt
     )
 
     _uiState.update {
       it.copy(
-        customModels = listOf(newModel) + it.customModels,
         selectedModel = newModel,
         currentScreen = CurrentScreen.CHAT,
         parameters = it.parameters.copy(
@@ -219,18 +149,55 @@ class ChatViewModel(
     }
   }
 
+  fun importCustomModel(
+    name: String,
+    formatType: ModelFormatType,
+    parameterSize: String,
+    quantization: String,
+    filePathOrUri: String,
+    tokenizerUri: String?,
+    configUri: String?,
+    tokenizerConfigUri: String?,
+    generationConfigUri: String?,
+    customPrompt: String
+  ) {
+    val newModel = repository.addCustomModel(
+      name = name,
+      formatType = formatType,
+      parameterSize = parameterSize,
+      quantization = quantization,
+      filePathOrUri = filePathOrUri,
+      tokenizerUri = tokenizerUri,
+      configUri = configUri,
+      tokenizerConfigUri = tokenizerConfigUri,
+      generationConfigUri = generationConfigUri,
+      customPrompt = customPrompt
+    )
+
+    _uiState.update {
+      it.copy(
+        selectedModel = newModel,
+        showImportDialog = false,
+        showModelSelectorDialog = false,
+        currentScreen = CurrentScreen.CHAT,
+        parameters = it.parameters.copy(
+          systemPrompt = newModel.defaultSystemPrompt,
+          contextWindow = newModel.contextLength,
+          backend = if (formatType == ModelFormatType.GGUF) InferenceBackend.CPP_LLAMA else InferenceBackend.RUST_CANDLE
+        )
+      )
+    }
+  }
+
   fun deleteCustomModel(modelId: String) {
+    repository.deleteModel(modelId)
     _uiState.update { state ->
-      val updatedCustom = state.customModels.filterNot { it.id == modelId }
       val fallbackModel = if (state.selectedModel?.id == modelId) {
-        updatedCustom.firstOrNull()
+        state.customModels.firstOrNull { it.id != modelId }
       } else {
         state.selectedModel
       }
-      state.copy(
-        customModels = updatedCustom,
-        selectedModel = fallbackModel
-      )
+      state.copy(selectedModel = fallbackModel)
     }
   }
 
@@ -247,6 +214,7 @@ class ChatViewModel(
     }
   }
 
+  // Parameters Management
   fun updateParameters(newParameters: InferenceParameters) {
     _uiState.update {
       it.copy(
@@ -273,6 +241,7 @@ class ChatViewModel(
     }
   }
 
+  // Chat & Stream Inferences
   fun sendMessage(userText: String) {
     val currentModel = _uiState.value.selectedModel ?: return
     if (userText.isBlank() || _uiState.value.isGenerating) return
@@ -280,6 +249,7 @@ class ChatViewModel(
     val currentParams = _uiState.value.parameters
     val currentTokensUsed = _uiState.value.approximateConversationTokens
     val deviceHasNpu = _uiState.value.systemSpecs.hasNpu
+    val conversationHistory = _uiState.value.messages
 
     val userMessage = ChatMessage(
       role = ChatRole.USER,
@@ -309,6 +279,7 @@ class ChatViewModel(
           userPrompt = userText,
           model = currentModel,
           parameters = currentParams,
+          conversationHistory = conversationHistory,
           estimatedTotalContextTokens = currentTokensUsed,
           deviceHasNpu = deviceHasNpu
         ).collect { chunk ->
@@ -379,60 +350,4 @@ class ChatViewModel(
       )
     }
   }
-
-  fun importCustomModel(
-    name: String,
-    formatType: ModelFormatType,
-    parameterSize: String,
-    quantization: String,
-    filePathOrUri: String,
-    tokenizerUri: String?,
-    configUri: String?,
-    tokenizerConfigUri: String?,
-    generationConfigUri: String?,
-    customPrompt: String
-  ) {
-    val cleanName = if (name.isNotBlank()) name else "Modelo Importado"
-    val isGguf = formatType == ModelFormatType.GGUF
-    val newModel = LocalAiModel(
-      id = "${if (isGguf) "gguf" else "safetensors"}-${UUID.randomUUID()}",
-      name = cleanName,
-      developer = "Importado por usuario",
-      parameterSize = parameterSize.ifBlank { "Personalizado" },
-      quantization = quantization.ifBlank { if (isGguf) "Q4_K_M" else "F16" },
-      ramRequired = if (isGguf) "Carga mmap optimizada" else "Rust Candle tensores",
-      speedEstimate = if (isGguf) "~25-45 tok/s" else "~20-38 tok/s",
-      recommendedFor = "Inferencia local personalizada",
-      downloadSize = "Local",
-      formatType = formatType,
-      contextLength = 4096,
-      isUserImported = true,
-      filePathOrUri = filePathOrUri,
-      tokenizerPathOrUri = tokenizerUri,
-      configPathOrUri = configUri,
-      tokenizerConfigPathOrUri = tokenizerConfigUri,
-      generationConfigPathOrUri = generationConfigUri,
-      defaultSystemPrompt = customPrompt.ifBlank { "Eres un asistente de IA local ejecutado en Android." }
-    )
-
-    _uiState.update {
-      it.copy(
-        customModels = listOf(newModel) + it.customModels,
-        selectedModel = newModel,
-        showImportDialog = false,
-        showModelSelectorDialog = false,
-        currentScreen = CurrentScreen.CHAT,
-        parameters = it.parameters.copy(
-          systemPrompt = newModel.defaultSystemPrompt,
-          contextWindow = newModel.contextLength,
-          backend = if (isGguf) InferenceBackend.CPP_LLAMA else InferenceBackend.RUST_CANDLE
-        )
-      )
-    }
-  }
-
-  fun showImportDialog(show: Boolean) {
-    _uiState.update { it.copy(showImportDialog = show) }
-  }
 }
-
