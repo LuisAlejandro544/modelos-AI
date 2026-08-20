@@ -46,26 +46,25 @@ class MainActivity : ComponentActivity() {
 fun LocalAiApp(viewModel: ChatViewModel) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-  Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-    AnimatedContent(
-      targetState = state.currentScreen,
-      transitionSpec = { fadeIn() togetherWith fadeOut() },
-      label = "screen_transition",
-      modifier = Modifier.padding(innerPadding)
-    ) { screen ->
-      when (screen) {
-        CurrentScreen.WELCOME -> {
-          WelcomeScreen(
-            selectedModel = state.selectedModel,
-            systemSpecs = state.systemSpecs,
-            onSelectGgufFile = { uri -> viewModel.loadGgufModelDirect(uri) },
-            onOpenSafeTensorsFlow = { viewModel.navigateTo(CurrentScreen.IMPORT_SAFETENSORS) },
-            onStartChatClick = { viewModel.navigateTo(CurrentScreen.CHAT) },
-            onChangeModelClick = { viewModel.showModelSelector(true) },
-            onOpenParametersClick = { viewModel.showParameters(true) },
-            onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) }
-          )
-        }
+  AnimatedContent(
+    targetState = state.currentScreen,
+    transitionSpec = { fadeIn() togetherWith fadeOut() },
+    label = "screen_transition",
+    modifier = Modifier.fillMaxSize()
+  ) { screen ->
+    when (screen) {
+      CurrentScreen.WELCOME -> {
+        WelcomeScreen(
+          selectedModel = state.selectedModel,
+          systemSpecs = state.systemSpecs,
+          onSelectGgufFile = { uri, name -> viewModel.loadGgufModelDirect(uri, name) },
+          onOpenSafeTensorsFlow = { viewModel.navigateTo(CurrentScreen.IMPORT_SAFETENSORS) },
+          onStartChatClick = { viewModel.navigateTo(CurrentScreen.CHAT) },
+          onChangeModelClick = { viewModel.showModelSelector(true) },
+          onOpenParametersClick = { viewModel.showParameters(true) },
+          onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) }
+        )
+      }
 
         CurrentScreen.IMPORT_SAFETENSORS -> {
           SafeTensorsImportScreen(
@@ -111,7 +110,6 @@ fun LocalAiApp(viewModel: ChatViewModel) {
         }
       }
     }
-  }
 
   // Model Selector Dialog
   if (state.showModelSelectorDialog) {

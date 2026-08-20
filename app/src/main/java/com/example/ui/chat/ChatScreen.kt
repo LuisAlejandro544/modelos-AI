@@ -16,14 +16,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -116,13 +121,16 @@ fun ChatScreen(
     modifier = modifier
       .fillMaxSize()
       .testTag("chat_screen"),
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       Column(
         modifier = Modifier
           .fillMaxWidth()
           .background(MaterialTheme.colorScheme.surface)
+          .statusBarsPadding()
       ) {
         TopAppBar(
+          windowInsets = WindowInsets(0, 0, 0, 0),
           colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -307,7 +315,7 @@ fun ChatScreen(
           .fillMaxWidth()
           .background(MaterialTheme.colorScheme.surface)
           .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-          .imePadding()
+          .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
           .padding(horizontal = 12.dp, vertical = 8.dp)
       ) {
         // Quick Parameter info row

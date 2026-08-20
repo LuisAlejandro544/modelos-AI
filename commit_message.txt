@@ -1,8 +1,9 @@
-feat(models): implementacion de modos GGUF directo y SafeTensors modular
+feat(ui-fix): correccion de espaciados de ventana, insets de teclado y nombres de archivo en chat
 
-- Eliminados modelos simulados/preconfigurados para garantizar ejecucion 100% local y offline con archivos propios del usuario.
-- Implementado Modo GGUF (.gguf): seleccion rapida de un solo archivo autocontenido para inicio instantaneo con llama.cpp.
-- Implementado Modo SafeTensors (.safetensors): nueva pantalla dedicada para seleccionar por separado los pesos (.safetensors), el tokenizador (tokenizer.json), la configuracion (config.json) y archivos auxiliares opcionales antes de iniciar la conversacion con el motor Rust (Candle).
-- Actualizado WelcomeScreen con selector de modos interactivo y gestion de modelos en memoria.
-- Refactorizado ChatViewModel y ChatScreen para soportar seleccion modular de backend de inferencia y metadatos dinamicos.
-- Actualizada documentacion del proyecto (README.md, ROADMAP.md, AI_CONTEXT.md) reflejando la nueva arquitectura.
+- Eliminado Scaffold redundante en MainActivity que duplicaba el padding de la barra de estado y generaba un hueco negro superior en ChatScreen y SafeTensorsImportScreen.
+- Corregido el espaciado del teclado virtual (IME) en ChatScreen utilizando WindowInsets.safeDrawing.only(Bottom) para eliminar el espacio vacío inferior al escribir.
+- Agregada resolución de nombres reales de archivo (OpenableColumns.DISPLAY_NAME) en WelcomeScreen para evitar identificadores de almacenamiento crudos como 'msf:...'.
+- Configurado tokenizer_config.json como archivo obligatorio en SafeTensorsImportScreen e ImportModelDialog para garantizar el soporte de plantillas de chat (ChatML, Llama-3, Gemma, Mistral).
+- Implementado parser reactivo de metadatos en JSON para extraer automáticamente tipo de modelo, capas ocultas, parámetros estimados y precisión (F16/BF16) al seleccionar config.json y tokenizer_config.json.
+- Conectado el flujo de generación de SafeTensors al motor nativo Rust (Candle) con formateo de chat templates y cálculo de tokens en tiempo real.
+- Actualizada documentación del proyecto (README.md, ROADMAP.md, AI_CONTEXT.md) reflejando los 4 archivos obligatorios de SafeTensors y la arquitectura de inferencia 100% local y privada.

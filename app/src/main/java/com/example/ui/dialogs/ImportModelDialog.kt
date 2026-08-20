@@ -363,11 +363,11 @@ fun ImportModelDialog(
                   onBrowseClick = { configPickerLauncher.launch(arrayOf("*/*")) }
                 )
 
-                // 4. tokenizer_config.json (Recomendado)
+                // 4. tokenizer_config.json (Obligatorio)
                 FileSelectorField(
                   title = "4. tokenizer_config.json (Plantilla Chat):",
-                  badgeText = "Recomendado",
-                  badgeColor = MaterialTheme.colorScheme.tertiary,
+                  badgeText = "Obligatorio",
+                  badgeColor = MaterialTheme.colorScheme.error,
                   filePath = tokenizerConfigFilePath,
                   placeholder = "tokenizer_config.json (chat_template, eos)",
                   testTag = "tokenizer_config_path_input",

@@ -64,6 +64,16 @@ class LocalInferenceEngine {
     // Resolve active hardware accelerator with auto-fallback
     val (resolvedHardwareName, hardwareSpeedMultiplier) = resolveHardware(parameters.accelerator, deviceHasNpu)
 
+    // Format prompt based on model format & template if SafeTensors
+    val formattedPrompt = if (model.formatType == com.example.model.ModelFormatType.SAFETENSORS) {
+      RustInferenceBridge.formatChatPrompt(
+        systemPrompt = parameters.systemPrompt,
+        userMessage = userPrompt
+      )
+    } else {
+      userPrompt
+    }
+
     // Query native backend capabilities
     when (parameters.backend) {
       InferenceBackend.CPP_LLAMA -> {

@@ -1,6 +1,8 @@
 package com.example.ui.welcome
 
+import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -15,8 +17,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -62,7 +67,7 @@ import com.example.viewmodel.SystemSpecs
 fun WelcomeScreen(
   selectedModel: LocalAiModel?,
   systemSpecs: SystemSpecs,
-  onSelectGgufFile: (uri: String) -> Unit,
+  onSelectGgufFile: (uri: String, displayName: String?) -> Unit,
   onOpenSafeTensorsFlow: () -> Unit,
   onStartChatClick: () -> Unit,
   onChangeModelClick: () -> Unit,
@@ -70,11 +75,16 @@ fun WelcomeScreen(
   onOpenTokenizerGuide: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  // GGUF single file picker launcher
+  val context = LocalContext.current
+
+  // GGUF single file picker launcher with filename extraction
   val ggufLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
   ) { uri: Uri? ->
-    uri?.let { onSelectGgufFile(it.toString()) }
+    uri?.let {
+      val displayName = extractDisplayNameFromUri(context, it)
+      onSelectGgufFile(it.toString(), displayName)
+    }
   }
 
   Surface(
@@ -86,8 +96,10 @@ fun WelcomeScreen(
     Column(
       modifier = Modifier
         .fillMaxSize()
+        .statusBarsPadding()
+        .navigationBarsPadding()
         .verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp, vertical = 20.dp),
+        .padding(horizontal = 20.dp, vertical = 16.dp),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       // Hero Image with smooth rounded frame
@@ -559,4 +571,27 @@ private fun SystemStatItem(
       color = MaterialTheme.colorScheme.onSurface
     )
   }
+}
+
+private fun extractDisplayNameFromUri(context: Context, uri: Uri): String? {
+  var name: String? = null
+  if (uri.scheme == "content") {
+    try {
+      context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+          val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+          if (index >= 0) {
+            name = cursor.getString(index)
+          }
+        }
+      }
+    } catch (_: Exception) {}
+  }
+  if (name.isNullOrBlank()) {
+    name = uri.lastPathSegment?.substringAfterLast("/")
+  }
+  return name?.removeSuffix(".gguf")
+    ?.replace("-", " ")
+    ?.replace("_", " ")
+    ?.trim()
 }

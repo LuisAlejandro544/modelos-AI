@@ -1,6 +1,6 @@
 # 📱 Local AI Android (100% Offline & Private)
 
-Aplicación nativa para Android desarrollada con **Kotlin**, **Jetpack Compose (Material Design 3)**, y motores nativos híbridos en **C++ (`llama.cpp` / NDK)** y **Rust (`Candle` / UniFFI)** para ejecutar modelos de Inteligencia Artificial locales sin conexión a internet, sin servidores externos, sin simulaciones y con privacidad garantizada.
+Aplicación nativa para Android desarrollada con **Kotlin**, **Jetpack Compose (Material Design 3)**, y motores nativos híbridos en **C++ (`llama.cpp` / NDK)** y **Rust (`Candle` / UniFFI)** para ejecutar modelos de Inteligencia Artificial locales sin conexión a internet, sin servidores externos, sin llamadas simuladas y con privacidad garantizada.
 
 ---
 
@@ -15,13 +15,13 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
 
 2. 🧩 **Modo SafeTensors (`.safetensors`):**
    - Carga modular en el motor nativo de Rust (`Candle`).
-   - Pantalla de configuración dedicada para seleccionar los archivos necesarios por separado:
-     - **Pesos:** `*.safetensors` (Obligatorio).
-     - **Tokenizador:** `tokenizer.json` (Obligatorio).
-     - **Configuración:** `config.json` (Obligatorio).
-     - **Tokenizer Config:** `tokenizer_config.json` (Opcional).
-     - **Generation Config:** `generation_config.json` (Opcional).
-   - Permite personalizar el prompt inicial del sistema y definir parámetros antes de iniciar el chat.
+   - Pantalla de configuración dedicada que requiere e integra los **4 archivos obligatorios**:
+     - **1. Pesos:** `*.safetensors` (Matrices y capas neuronales del modelo).
+     - **2. Tokenizador:** `tokenizer.json` (Diccionario BPE/WordPiece que traduce palabras a IDs de tokens).
+     - **3. Configuración de Arquitectura:** `config.json` (Capas ocultas, cabezas de atención, dimensiones de tensores).
+     - **4. Configuración del Tokenizador:** `tokenizer_config.json` (**Obligatorio**: Plantilla de chat como ChatML, Llama-3, Gemma, tokens especiales BOS/EOS).
+     - **5. Archivo Auxiliar Opcional:** `generation_config.json` (Valores de fábrica de muestreo y temperatura).
+   - **Extracción Automática de Metadatos:** Al seleccionar `config.json` y `tokenizer_config.json`, la app extrae automáticamente la cantidad estimada de parámetros (0.5B, 1.5B, 3B), tipo de cuantización/dtype (F16, BF16) y la plantilla de formato de chat correspondiente.
 
 ---
 
@@ -57,7 +57,8 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
                               │   C++ Engine (llama.cpp)  │    │    Rust Engine (Candle)   │
                               │  • Vulkan / GPU / NEON    │    │  • Safe Tensors & Memory  │
                               │  • mmap Flash Mapping     │    │  • UniFFI / JNI Bridge    │
-                              │  • Carga 1-click GGUF     │    │  • Carga modular multi-file│
+                              │  • Carga 1-click GGUF     │    │  • Formato 4-archivos     │
+                              │                           │    │  • Chat Template parser   │
                               └───────────────────────────┘    └───────────────────────────┘
 ```
 
@@ -72,7 +73,7 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
 - **Temperatura:** 0.0 a 1.5.
 - **Top-P:** 0.1 a 1.0.
 - **Max Tokens:** 64 a 2,048 tokens por respuesta.
-- **Prompt de Sistema:** Personalizable por sesión o por modelo importado.
+- **Prompt de Sistema:** Personalizable por sesión o autocompletado según el modelo importado.
 
 ---
 
@@ -81,3 +82,4 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
 - Preparado para distribución universal mediante **APK firmado** en tiendas de terceros como Uptodown, F-Droid o GitHub Releases.
 - No requiere Google Play Services ni permisos invasivos de red.
 - Flujo CI/CD automatizado con GitHub Actions en `.github/workflows/build-apk.yml`.
+

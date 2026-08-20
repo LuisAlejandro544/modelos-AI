@@ -15,7 +15,8 @@ Este documento detalla el estado actual del desarrollo y las metas para la aplic
 
 ## 🟢 Fase 2: Flujo Dual de Carga e Inferencia Móvil (Completada)
 - [x] **Modo GGUF Directo:** Carga en 1 paso de archivos autocontenidos `.gguf` mediante `llama.cpp` en C++.
-- [x] **Modo SafeTensors Modular:** Pantalla dedicada de configuración y selección individual de tensores (`*.safetensors`), tokenizador (`tokenizer.json`) y arquitectura (`config.json`) mediante `Candle` en Rust.
+- [x] **Modo SafeTensors Modular (4 Archivos Obligatorios):** Pantalla dedicada con carga obligatoria de tensores (`*.safetensors`), tokenizador (`tokenizer.json`), arquitectura (`config.json`) y plantilla de chat (`tokenizer_config.json`) mediante `Candle` en Rust.
+- [x] **Extracción Automática de Metadatos:** Auto-detección de capas, parámetros, cuantización y plantillas ChatML/Llama3/Gemma desde JSON.
 - [x] **Contador de Tokens y Medidor de Contexto:** Monitoreo en tiempo real del tamaño de la conversación vs. el límite de la ventana de contexto.
 - [x] **Medidor de Velocidad de Tokens por Segundo (t/s):** Contador en vivo durante el streaming y estadísticas de rendimiento post-generación.
 - [x] **Acelerador de Hardware Seleccionable (GPU / NPU / CPU):** Conmutación / fallback automático a GPU (Vulkan) si el dispositivo no cuenta con NPU física.

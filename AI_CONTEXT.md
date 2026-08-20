@@ -12,12 +12,14 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
    - Enrutado al motor nativo C++ (`llama.cpp`) con soporte para GPU Vulkan y `mmap`.
 
 2. **Modo SafeTensors (`.safetensors`):**
-   - Pantalla dedicada para seleccionar por separado:
+   - Pantalla dedicada para seleccionar por separado los 4 archivos obligatorios:
      1. Pesos: `*.safetensors`
-     2. Tokenizador: `tokenizer.json`
-     3. Configuración de modelo: `config.json`
-     4. Archivos auxiliares opcionales: `tokenizer_config.json`, `generation_config.json`.
-   - Enrutado al motor nativo Rust (`Candle`) con decodificación de tokens y seguridad de memoria.
+     2. Tokenizador: `tokenizer.json` (conversión de texto a IDs de tokens)
+     3. Configuración de modelo: `config.json` (capas, dimensiones, cabezas de atención)
+     4. Configuración del Tokenizador: `tokenizer_config.json` (Plantillas ChatML, Llama-3, Gemma, tokens especiales)
+     5. Archivo auxiliar opcional: `generation_config.json`.
+   - Extracción reactiva de metadatos JSON al seleccionar archivos.
+   - Enrutado al motor nativo Rust (`Candle`) con decodificación de tokens, plantillas de chat y seguridad de memoria.
 
 ---
 
