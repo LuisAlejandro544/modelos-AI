@@ -13,24 +13,19 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      # 2. Configurar JDK 17 con caché de Gradle integrado
+      # 2. Configurar JDK 17
       - name: Configurar Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
-      # 3. Caché adicional para optimizar tiempos de compilación de Gradle
-      - name: Configurar Caché de Gradle Build
-        uses: actions/cache@v4
+      # 3. Configurar Gradle oficial con la versión exacta del proyecto (9.3.1)
+      - name: Configurar Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          gradle-version: '9.3.1'
+          cache-read-only: false
 
       # 4. Generar la llave de firma Debug (debug.keystore) en la raíz del proyecto
       - name: Generar debug.keystore en la raíz del proyecto

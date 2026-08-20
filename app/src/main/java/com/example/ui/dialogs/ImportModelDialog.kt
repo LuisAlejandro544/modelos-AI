@@ -248,7 +248,7 @@ fun ImportModelDialog(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-              ModelFormatType.values().forEach { format ->
+              ModelFormatType.entries.forEach { format ->
                 val isSelected = format == selectedFormat
                 Card(
                   modifier = Modifier

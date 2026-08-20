@@ -177,7 +177,7 @@ fun ParametersDialog(
             }
             Spacer(modifier = Modifier.height(6.dp))
 
-            HardwareAccelerator.values().forEach { accelerator ->
+            HardwareAccelerator.entries.forEach { accelerator ->
               val isSelected = accelerator == selectedAccelerator
               Card(
                 modifier = Modifier
@@ -353,7 +353,7 @@ fun ParametersDialog(
             )
             Spacer(modifier = Modifier.height(6.dp))
 
-            InferenceBackend.values().forEach { backend ->
+            InferenceBackend.entries.forEach { backend ->
               val isSelected = backend == selectedBackend
               Card(
                 modifier = Modifier

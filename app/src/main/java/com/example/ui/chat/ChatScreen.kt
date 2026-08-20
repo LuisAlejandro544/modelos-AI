@@ -236,7 +236,7 @@ fun ChatScreen(
                 )
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                  text = "Contexto: ~$approximateTokens / $contextLimit tokens (${String.format("%.1f", contextPercentage)}%)",
+                  text = "Contexto: ~$approximateTokens / $contextLimit tokens (${String.format(java.util.Locale.US, "%.1f", contextPercentage)}%)",
                   style = MaterialTheme.typography.labelSmall,
                   fontWeight = FontWeight.SemiBold,
                   color = MaterialTheme.colorScheme.onSurface,

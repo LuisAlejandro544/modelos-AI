@@ -4,5 +4,5 @@ feat(engine): contador de tokens, velocidad t/s, acelerador GPU/NPU/CPU y mmap
 - Integrado velocímetro de tokens por segundo (t/s) en vivo durante la inferencia y métricas finales.
 - Implementado selector de acelerador de hardware (GPU Vulkan / NPU NNAPI / CPU ARM NEON) con fallback automático a GPU si no se detecta NPU.
 - Habilitada optimización de mapeo de memoria (mmap) para carga perezosa de modelos y reducción de uso de RAM física hasta 65%.
-- Corregida generación no interactiva de debug.keystore en workflow de CI/CD para APKs.
+- Corregida compatibilidad de compilación en GitHub Actions configurando Gradle oficial 9.3.1 y Java 17.
 - Actualizada documentación técnica en README, ROADMAP, STRUCTURE y AI_CONTEXT.
