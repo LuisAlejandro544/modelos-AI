@@ -9,7 +9,7 @@
 - **🔒 Privacidad y Modo Offline Total:** Ningún mensaje, prompt o dato personal sale del teléfono. Funciona sin internet ni llamadas a servidores externos.
 - **📂 Soporte para Modelos Propios (GGUF & SafeTensors):**
   - **GGUF (`.gguf`):** Formato todo en uno con pesos cuantizados y tokenizador integrado.
-  - **SafeTensors (`.safetensors`):** Carga directa de pesos de tensores crudos con soporte para `tokenizer.json` o `vocab.json`.
+  - **SafeTensors (`.safetensors`):** Carga directa de pesos de tensores crudos con configuración completa de archivos JSON (`tokenizer.json`, `config.json`, `tokenizer_config.json`, `generation_config.json`).
   - Soporte para modelos ultraligeros (**135M, 360M, 500M, 0.6B**) y modelos estándar (**1.1B, 1.5B, 2B, 3.8B**).
 - **⚡ Motores de Inferencia Nativos:**
   - **C++ Engine (`llama.cpp` / NDK):** Inferencia de alto rendimiento compilada en C++17 con soporte para vectorización SIMD **ARM NEON**.
@@ -43,6 +43,21 @@
 
 ---
 
+## 📚 Guía de Archivos de Modelos en Hugging Face
+
+Al buscar modelos en Hugging Face, te encontrarás con diferentes archivos en la pestaña *Files and versions*. Esta es la función de cada uno:
+
+| Archivo | Estado para SafeTensors | Estado para GGUF | ¿Para qué sirve? |
+| :--- | :--- | :--- | :--- |
+| **`model.safetensors`** | 🔴 **Obligatorio** | ❌ Innecesario | Contiene los pesos y matrices numéricas del modelo. |
+| **`tokenizer.json`** | 🔴 **Obligatorio** | ❌ Ya embebido | El vocabulario para traducir texto a números (tokens) y viceversa. |
+| **`config.json`** | 🔴 **Obligatorio** | ❌ Ya embebido | El plano arquitectónico: número de capas, dimensiones y cabezas. |
+| **`tokenizer_config.json`** | 🟡 **Recomendado** | ❌ Ya embebido | Plantilla de chat (`chat_template`) y tokens de parada (`eos_token`). |
+| **`generation_config.json`** | ⚪ **Opcional** | ❌ Ya embebido | Hiperparámetros de muestreo por defecto. |
+| **`training_args.bin`** | ⛔ **IGNORAR** | ⛔ **IGNORAR** | Registros de entrenamiento antiguo. No sirve para inferencia. |
+
+---
+
 ## 🛠️ Requisitos Técnicos e Instalación
 
 ### Requisitos del Sistema
@@ -59,13 +74,9 @@ gradle assembleDebug
 gradle :app:testDebugUnitTest
 ```
 
----
-
-## 📚 ¿GGUF o SafeTensors? ¿Cuándo necesito `tokenizer.json`?
-
-1. **Si usas archivos `.gguf`:**
-   - **NO necesitas descargar ningún archivo de tokenizer.**
-   - El formato GGUF ya contiene los pesos, el vocabulario de tokens, los tokens especiales (`<|im_start|>`, `<|im_end|>`) y la plantilla de chat en el mismo archivo.
-2. **Si usas archivos `.safetensors`:**
-   - **SÍ necesitas descargar `tokenizer.json` o `vocab.json`.**
-   - SafeTensors almacena únicamente las matrices de pesos. Para que la app convierta tus palabras a números de entrada, requiere el archivo `tokenizer.json` que acompaña al repositorio del modelo en Hugging Face.
+### GitHub Actions (CI/CD Automatizado)
+El repositorio incluye un flujo en `.github/workflows/build-apk.yml` que:
+1. Clona el código fuente.
+2. Genera y firma el APK con `debug.keystore` en el entorno virtual de GitHub.
+3. Almacena en caché las dependencias de Gradle para compilaciones instantáneas.
+4. Genera el APK listo para descargar en la pestaña *Actions*.

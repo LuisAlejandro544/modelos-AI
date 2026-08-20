@@ -100,8 +100,8 @@ fun LocalAiApp(viewModel: ChatViewModel) {
   // Import Model Dialog
   if (state.showImportDialog) {
     ImportModelDialog(
-      onImport = { name, format, paramSize, quant, path, tokenizer, prompt ->
-        viewModel.importCustomModel(name, format, paramSize, quant, path, tokenizer, prompt)
+      onImport = { name, format, paramSize, quant, path, tokenizer, config, tokConfig, genConfig, prompt ->
+        viewModel.importCustomModel(name, format, paramSize, quant, path, tokenizer, config, tokConfig, genConfig, prompt)
       },
       onOpenTokenizerGuide = { viewModel.showTokenizerGuide(true) },
       onDismiss = { viewModel.showImportDialog(false) }

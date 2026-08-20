@@ -11,15 +11,21 @@ Este documento proporciona el contexto técnico esencial para que cualquier desa
    - No se implementan llamadas a APIs en la nube de pago ni envío de telemetría o prompts a servidores remotos.
    - La inferencia ocurre íntegramente en la CPU/GPU/NPU del dispositivo móvil Android.
 
-2. **Diferencias Clave entre Formatos de Modelo:**
+2. **Diferencias Clave entre Formatos y Archivos de Modelo:**
    - **GGUF (GPT-Generated Unified Format):**
      - Desarrollado por el ecosistema `llama.cpp`.
      - Empaqueta en un único binario: metadatos del modelo, tensores cuantizados (Q4_K_M, Q4_0, Q5_K_M, Q8_0), vocabulario completo del tokenizador y plantilla de chat (`chat_template`).
      - **No requiere archivos externos adicionales**.
-   - **SafeTensors:**
+   - **SafeTensors (`.safetensors`):**
      - Desarrollado por Hugging Face para almacenar tensores numpy/torch de forma rápida y segura.
-     - Solo contiene los tensores de pesos numéricos; **no contiene el tokenizador**.
-     - Requiere que el usuario proporcione un archivo `tokenizer.json` o `vocab.json` compatible para convertir texto a tokens.
+     - Solo contiene los tensores de pesos numéricos; **no contiene el tokenizador ni la configuración de capas**.
+     - **Archivos requeridos y opcionales:**
+       1. `model.safetensors`: Obligatorio (Pesos neuronales).
+       2. `tokenizer.json`: Obligatorio (Vocabulario de IDs de tokens).
+       3. `config.json`: Obligatorio (Arquitectura de capas, hidden dimensions, cabezas de atención).
+       4. `tokenizer_config.json`: Recomendado (Plantilla de chat y tokens especiales como `<|im_end|>`).
+       5. `generation_config.json`: Opcional (Valores por defecto de temperatura y top_p).
+       6. `training_args.bin`: **No requerido** (Solo registros de entrenamiento de fine-tuning).
 
 3. **Ecosistema de Motores Nativos:**
    - **C++ (`llama.cpp` / NDK):**

@@ -120,6 +120,9 @@ class ChatViewModel(
     quantization: String,
     fileUriOrPath: String,
     tokenizerUriOrPath: String?,
+    configUriOrPath: String?,
+    tokenizerConfigUriOrPath: String?,
+    generationConfigUriOrPath: String?,
     customPrompt: String
   ) {
     val estimatedRam = when {
@@ -156,6 +159,9 @@ class ChatViewModel(
       isUserImported = true,
       filePathOrUri = fileUriOrPath,
       tokenizerPathOrUri = tokenizerUriOrPath,
+      configPathOrUri = configUriOrPath,
+      tokenizerConfigPathOrUri = tokenizerConfigUriOrPath,
+      generationConfigPathOrUri = generationConfigUriOrPath,
       defaultSystemPrompt = customPrompt.ifBlank { "Eres un asistente de IA ejecutándose desde un archivo de modelo local importado." }
     )
 

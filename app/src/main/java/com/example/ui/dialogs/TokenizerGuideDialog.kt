@@ -18,14 +18,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -90,13 +86,13 @@ fun TokenizerGuideDialog(
             Spacer(modifier = Modifier.width(12.dp))
             Column {
               Text(
-                text = "Guía: Tokenizers y Modelos",
+                text = "Guía: Archivos y Modelos",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "GGUF vs SafeTensors • Cómo conseguirlos",
+                text = "¿Cuáles necesitas descargar y cuáles no?",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -146,14 +142,14 @@ fun TokenizerGuideDialog(
               Spacer(modifier = Modifier.width(10.dp))
               Column {
                 Text(
-                  text = "¿Qué es tokenizer.json / vocab.json?",
+                  text = "Regla de Oro: GGUF vs SafeTensors",
                   style = MaterialTheme.typography.titleSmall,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                  text = "Las redes neuronales no leen letras; leen números (IDs). El tokenizador es el traductor bidireccional que convierte tus palabras en números y viceversa.",
+                  text = "• En GGUF (.gguf): Solo descargas 1 archivo. Contiene pesos, tokenizador y configs en su interior.\n• En SafeTensors (.safetensors): Se compone de varios archivos separados en Hugging Face.",
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                   lineHeight = 18.sp
@@ -162,109 +158,65 @@ fun TokenizerGuideDialog(
             }
           }
 
-          // Comparison Section
+          // Breakdown of Files in Hugging Face
           Text(
-            text = "¿Necesito archivos de tokenizador adicionales?",
+            text = "Desglose de Archivos en SafeTensors:",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
           )
 
-          // GGUF Card
-          Card(
-            modifier = Modifier
-              .fillMaxWidth()
-              .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
-            colors = CardDefaults.cardColors(
-              containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            ),
-            shape = RoundedCornerShape(14.dp)
-          ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                  text = "1. Formato GGUF (.gguf)",
-                  style = MaterialTheme.typography.titleSmall,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                  modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                  Text(
-                    text = "TODO EN UNO",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp
-                  )
-                }
-              }
-              Spacer(modifier = Modifier.height(6.dp))
-              Text(
-                text = "• ¿Requiere tokenizer.json por separado? NO.\n" +
-                  "• Por qué: GGUF empaqueta los tensores, el vocabulario completo, las reglas de unión de tokens (BPE/SentencePiece) y la plantilla de chat dentro del mismo archivo .gguf.\n" +
-                  "• Recomendación: Es el formato más fácil y recomendado para móviles.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 18.sp
-              )
-            }
-          }
+          FileExplanationCard(
+            fileName = "1. model.safetensors",
+            badgeText = "OBLIGATORIO",
+            badgeColor = MaterialTheme.colorScheme.error,
+            description = "Contiene los millones de pesos y matrices numéricas de la red neuronal.",
+            isRequired = true
+          )
 
-          // SafeTensors Card
-          Card(
-            modifier = Modifier
-              .fillMaxWidth()
-              .border(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
-            colors = CardDefaults.cardColors(
-              containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            ),
-            shape = RoundedCornerShape(14.dp)
-          ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                  text = "2. Formato SafeTensors (.safetensors)",
-                  style = MaterialTheme.typography.titleSmall,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.secondary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                  modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                  Text(
-                    text = "REQUIERE TOKENIZER",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp
-                  )
-                }
-              }
-              Spacer(modifier = Modifier.height(6.dp))
-              Text(
-                text = "• ¿Requiere tokenizer.json por separado? SÍ.\n" +
-                  "• Por qué: SafeTensors fue diseñado solo para almacenar arrays de matrices de pesos de forma segura (sin ejecutar código arbitrario como Pickle). No guarda el diccionario de texto.\n" +
-                  "• Para inferencia con Rust (Candle) o Python, debes descargar tanto model.safetensors como tokenizer.json.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 18.sp
-              )
-            }
-          }
+          FileExplanationCard(
+            fileName = "2. tokenizer.json",
+            badgeText = "OBLIGATORIO",
+            badgeColor = MaterialTheme.colorScheme.error,
+            description = "El diccionario y reglas para traducir tus palabras a números (IDs de tokens) y viceversa.",
+            isRequired = true
+          )
 
-          // How to get them from Hugging Face
+          FileExplanationCard(
+            fileName = "3. config.json",
+            badgeText = "OBLIGATORIO",
+            badgeColor = MaterialTheme.colorScheme.error,
+            description = "El plano del modelo: define la cantidad de capas, cabezas de atención y longitud de contexto.",
+            isRequired = true
+          )
+
+          FileExplanationCard(
+            fileName = "4. tokenizer_config.json",
+            badgeText = "RECOMENDADO",
+            badgeColor = MaterialTheme.colorScheme.tertiary,
+            description = "Contiene la plantilla de chat (chat_template) y tokens de fin de frase (<|im_end|>).",
+            isRequired = false
+          )
+
+          FileExplanationCard(
+            fileName = "5. generation_config.json",
+            badgeText = "OPCIONAL",
+            badgeColor = MaterialTheme.colorScheme.outline,
+            description = "Configuración de fábrica de temperatura y top_p (la app te permite ajustarlos en tiempo real).",
+            isRequired = false
+          )
+
+          FileExplanationCard(
+            fileName = "6. training_args.bin",
+            badgeText = "IGNORAR / NO DESCARGAR",
+            badgeColor = Color.Gray,
+            description = "Solo guarda registros del entrenamiento original. Es inútil para inferencia en el teléfono.",
+            isRequired = false
+          )
+
+          // How to get them
           Text(
-            text = "¿Cómo y de dónde descargarlos en tu teléfono o PC?",
+            text = "Pasos para descargar en Hugging Face:",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
@@ -283,23 +235,18 @@ fun TokenizerGuideDialog(
             ) {
               GuideStepItem(
                 step = "1",
-                title = "Entra a Hugging Face (huggingface.co)",
-                detail = "Busca modelos pequeños optimizados para móvil como: SmolLM-360M, Qwen2.5-0.5B, TinyLlama o Llama-3.2-1B."
+                title = "Entra a huggingface.co",
+                detail = "Busca tu modelo deseado (ej: HuggingFaceTB/SmolLM-360M-Instruct o Qwen/Qwen2.5-0.5B)."
               )
               GuideStepItem(
                 step = "2",
-                title = "Abre la pestaña 'Files and versions'",
-                detail = "Aquí verás la lista de archivos que componen el repositorio del modelo."
+                title = "Pestaña 'Files and versions'",
+                detail = "Descarga model.safetensors, tokenizer.json, config.json y tokenizer_config.json."
               )
               GuideStepItem(
                 step = "3",
-                title = "Descarga según el formato que elijas",
-                detail = "• Para GGUF: Descarga el archivo que termine en .gguf (ej: model-Q4_K_M.gguf).\n• Para SafeTensors: Descarga model.safetensors Y el archivo tokenizer.json."
-              )
-              GuideStepItem(
-                step = "4",
-                title = "Importa en AI Local",
-                detail = "Toca 'Importar Modelo Propio' en esta app y selecciona tus archivos descargados."
+                title = "Carga en AI Local",
+                detail = "Toca 'Importar Modelo Propio', elige formato SafeTensors y asigna los archivos descargados."
               )
             }
           }
@@ -318,6 +265,66 @@ fun TokenizerGuideDialog(
           Text("Entendido", fontWeight = FontWeight.Bold)
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun FileExplanationCard(
+  fileName: String,
+  badgeText: String,
+  badgeColor: Color,
+  description: String,
+  isRequired: Boolean
+) {
+  Card(
+    modifier = Modifier
+      .fillMaxWidth()
+      .border(
+        width = if (isRequired) 1.dp else 0.5.dp,
+        color = badgeColor.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(12.dp)
+      ),
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    ),
+    shape = RoundedCornerShape(12.dp)
+  ) {
+    Column(modifier = Modifier.padding(10.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = fileName,
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+        Box(
+          modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(badgeColor.copy(alpha = 0.15f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+          Text(
+            text = badgeText,
+            style = MaterialTheme.typography.labelSmall,
+            color = badgeColor,
+            fontWeight = FontWeight.Bold,
+            fontSize = 9.sp
+          )
+        }
+      }
+      Spacer(modifier = Modifier.height(3.dp))
+      Text(
+        text = description,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 11.5.sp,
+        lineHeight = 16.sp
+      )
     }
   }
 }

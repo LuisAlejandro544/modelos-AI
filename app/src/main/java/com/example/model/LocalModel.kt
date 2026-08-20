@@ -36,6 +36,9 @@ data class LocalAiModel(
   val isUserImported: Boolean = false,
   val filePathOrUri: String? = null,
   val tokenizerPathOrUri: String? = null,
+  val configPathOrUri: String? = null,
+  val tokenizerConfigPathOrUri: String? = null,
+  val generationConfigPathOrUri: String? = null,
   val defaultSystemPrompt: String = "Eres un asistente de Inteligencia Artificial local y privado que se ejecuta en el dispositivo Android del usuario."
 )
 

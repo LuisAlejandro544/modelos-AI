@@ -23,7 +23,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle' # Caché automático de dependencias y wrapper de Gradle
+          cache: 'gradle'
 
       # 3. Caché adicional para optimizar tiempos de compilación de Gradle
       - name: Configurar Caché de Gradle Build
@@ -36,19 +36,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # 4. Generar la llave de firma Debug (debug.keystore) en el runner
-      - name: Generar debug.keystore automáticamente
+      # 4. Generar la llave de firma Debug (debug.keystore) en el root del proyecto para Gradle
+      - name: Generar debug.keystore en la raíz del proyecto
         run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            echo "Generando nueva llave debug.keystore en el runner..."
-            keytool -genkey -v -keystore ~/.android/debug.keystore \
+          echo "Verificando debug.keystore en el proyecto..."
+          if [ -f debug.keystore.base64 ]; then
+            echo "Decodificando debug.keystore.base64..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          elif [ ! -f debug.keystore ]; then
+            echo "Generando nuevo debug.keystore con keytool en la raíz..."
+            keytool -genkey -v -keystore ./debug.keystore \
               -storepass android -alias androiddebugkey -keypass android \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
+          
+          # También copiar a ~/.android para compatibilidad global
+          mkdir -p ~/.android
+          cp -f ./debug.keystore ~/.android/debug.keystore || true
+          ls -la ./debug.keystore
 
-      # 5. Dar permisos de ejecución al wrapper de Gradle (si existe) o usar gradle
+      # 5. Dar permisos de ejecución al wrapper de Gradle (si existe)
       - name: Preparar Gradle Wrapper
         run: |
           if [ -f ./gradlew ]; then

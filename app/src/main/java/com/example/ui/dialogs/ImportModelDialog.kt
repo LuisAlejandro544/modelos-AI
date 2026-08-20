@@ -21,16 +21,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -67,6 +64,9 @@ fun ImportModelDialog(
     quantization: String,
     fileUriOrPath: String,
     tokenizerUriOrPath: String?,
+    configUriOrPath: String?,
+    tokenizerConfigUriOrPath: String?,
+    generationConfigUriOrPath: String?,
     customPrompt: String
   ) -> Unit,
   onOpenTokenizerGuide: () -> Unit,
@@ -76,11 +76,17 @@ fun ImportModelDialog(
   var selectedFormat by remember { mutableStateOf(ModelFormatType.GGUF) }
   var parameterSize by remember { mutableStateOf("500M") }
   var quantization by remember { mutableStateOf("Q4_K_M") }
+  
+  // File Paths
   var modelFilePath by remember { mutableStateOf("") }
   var tokenizerFilePath by remember { mutableStateOf("") }
+  var configFilePath by remember { mutableStateOf("") }
+  var tokenizerConfigFilePath by remember { mutableStateOf("") }
+  var generationConfigFilePath by remember { mutableStateOf("") }
+  
   var systemPrompt by remember { mutableStateOf("Eres un asistente inteligente ejecutado desde un archivo de modelo propio.") }
 
-  // File Picker Launcher for Model Weights
+  // File Picker Launchers
   val modelFilePickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
   ) { uri ->
@@ -99,13 +105,28 @@ fun ImportModelDialog(
     }
   }
 
-  // File Picker Launcher for Tokenizer JSON
   val tokenizerPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
   ) { uri ->
-    uri?.let {
-      tokenizerFilePath = it.toString()
-    }
+    uri?.let { tokenizerFilePath = it.toString() }
+  }
+
+  val configPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument()
+  ) { uri ->
+    uri?.let { configFilePath = it.toString() }
+  }
+
+  val tokenizerConfigPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument()
+  ) { uri ->
+    uri?.let { tokenizerConfigFilePath = it.toString() }
+  }
+
+  val generationConfigPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument()
+  ) { uri ->
+    uri?.let { generationConfigFilePath = it.toString() }
   }
 
   Dialog(
@@ -155,7 +176,7 @@ fun ImportModelDialog(
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "Carga archivos .gguf o .safetensors locales",
+                text = "Carga .gguf o .safetensors con sus configs",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -213,7 +234,7 @@ fun ImportModelDialog(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                  text = "¿Cuál elegir?",
+                  text = "Guía de Archivos",
                   style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.primary,
                   fontWeight = FontWeight.SemiBold
@@ -254,7 +275,7 @@ fun ImportModelDialog(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                      text = if (format == ModelFormatType.GGUF) "Pesos + Tokenizador" else "Pesos + tokenizer.json",
+                      text = if (format == ModelFormatType.GGUF) "1 archivo todo en uno" else "Pesos + Configs JSON",
                       style = MaterialTheme.typography.bodySmall,
                       fontSize = 11.sp,
                       color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -286,102 +307,85 @@ fun ImportModelDialog(
             )
           }
 
-          // Model File Selector
-          Column {
-            Text(
-              text = "Archivo de Pesos (${selectedFormat.extension}):",
-              style = MaterialTheme.typography.labelLarge,
-              fontWeight = FontWeight.SemiBold,
-              color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              OutlinedTextField(
-                value = if (modelFilePath.isNotBlank()) modelFilePath.substringAfterLast("/") else "",
-                onValueChange = { modelFilePath = it },
-                placeholder = { Text("Selecciona archivo ${selectedFormat.extension}") },
-                modifier = Modifier
-                  .weight(1f)
-                  .testTag("custom_model_path_input"),
-                readOnly = true,
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-              )
-              Button(
-                onClick = {
-                  modelFilePickerLauncher.launch(arrayOf("*/*"))
-                },
-                modifier = Modifier.testTag("browse_model_file_button"),
-                shape = RoundedCornerShape(12.dp)
-              ) {
-                Icon(
-                  imageVector = Icons.Default.FolderOpen,
-                  contentDescription = "Explorar",
-                  modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Elegir")
-              }
-            }
-          }
+          // 1. Model Weights File
+          FileSelectorField(
+            title = "1. Archivo de Pesos (${selectedFormat.extension}):",
+            badgeText = "Obligatorio",
+            badgeColor = MaterialTheme.colorScheme.primary,
+            filePath = modelFilePath,
+            placeholder = "Selecciona archivo ${selectedFormat.extension}",
+            testTag = "custom_model_path_input",
+            buttonTestTag = "browse_model_file_button",
+            onBrowseClick = { modelFilePickerLauncher.launch(arrayOf("*/*")) }
+          )
 
-          // Tokenizer File Selector (If SafeTensors)
+          // SafeTensors specific configs
           if (selectedFormat == ModelFormatType.SAFETENSORS) {
-            Column {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+              ),
+              shape = RoundedCornerShape(14.dp)
+            ) {
+              Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
               ) {
                 Text(
-                  text = "Archivo Tokenizer (tokenizer.json):",
-                  style = MaterialTheme.typography.labelLarge,
-                  fontWeight = FontWeight.SemiBold,
-                  color = MaterialTheme.colorScheme.onSurface
+                  text = "Archivos de Configuración para SafeTensors:",
+                  style = MaterialTheme.typography.titleSmall,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                  text = "Requerido",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.secondary,
-                  fontWeight = FontWeight.Bold
+
+                // 2. tokenizer.json (Obligatorio)
+                FileSelectorField(
+                  title = "2. tokenizer.json (Vocabulario):",
+                  badgeText = "Obligatorio",
+                  badgeColor = MaterialTheme.colorScheme.error,
+                  filePath = tokenizerFilePath,
+                  placeholder = "tokenizer.json (conversión texto a IDs)",
+                  testTag = "tokenizer_path_input",
+                  buttonTestTag = "browse_tokenizer_file_button",
+                  onBrowseClick = { tokenizerPickerLauncher.launch(arrayOf("*/*")) }
                 )
-              }
-              Spacer(modifier = Modifier.height(4.dp))
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-              ) {
-                OutlinedTextField(
-                  value = if (tokenizerFilePath.isNotBlank()) tokenizerFilePath.substringAfterLast("/") else "",
-                  onValueChange = { tokenizerFilePath = it },
-                  placeholder = { Text("tokenizer.json o vocab.json") },
-                  modifier = Modifier
-                    .weight(1f)
-                    .testTag("tokenizer_path_input"),
-                  readOnly = true,
-                  singleLine = true,
-                  shape = RoundedCornerShape(12.dp)
+
+                // 3. config.json (Obligatorio)
+                FileSelectorField(
+                  title = "3. config.json (Arquitectura y capas):",
+                  badgeText = "Obligatorio",
+                  badgeColor = MaterialTheme.colorScheme.error,
+                  filePath = configFilePath,
+                  placeholder = "config.json (capas, dimensiones, cabezas)",
+                  testTag = "config_path_input",
+                  buttonTestTag = "browse_config_file_button",
+                  onBrowseClick = { configPickerLauncher.launch(arrayOf("*/*")) }
                 )
-                Button(
-                  onClick = {
-                    tokenizerPickerLauncher.launch(arrayOf("*/*"))
-                  },
-                  modifier = Modifier.testTag("browse_tokenizer_file_button"),
-                  shape = RoundedCornerShape(12.dp)
-                ) {
-                  Icon(
-                    imageVector = Icons.Default.FolderOpen,
-                    contentDescription = "Explorar",
-                    modifier = Modifier.size(18.dp)
-                  )
-                  Spacer(modifier = Modifier.width(6.dp))
-                  Text("Elegir")
-                }
+
+                // 4. tokenizer_config.json (Recomendado)
+                FileSelectorField(
+                  title = "4. tokenizer_config.json (Plantilla Chat):",
+                  badgeText = "Recomendado",
+                  badgeColor = MaterialTheme.colorScheme.tertiary,
+                  filePath = tokenizerConfigFilePath,
+                  placeholder = "tokenizer_config.json (chat_template, eos)",
+                  testTag = "tokenizer_config_path_input",
+                  buttonTestTag = "browse_tokenizer_config_button",
+                  onBrowseClick = { tokenizerConfigPickerLauncher.launch(arrayOf("*/*")) }
+                )
+
+                // 5. generation_config.json (Opcional)
+                FileSelectorField(
+                  title = "5. generation_config.json (Hiperparámetros):",
+                  badgeText = "Opcional",
+                  badgeColor = MaterialTheme.colorScheme.outline,
+                  filePath = generationConfigFilePath,
+                  placeholder = "generation_config.json (temperatura default)",
+                  testTag = "generation_config_path_input",
+                  buttonTestTag = "browse_generation_config_button",
+                  onBrowseClick = { generationConfigPickerLauncher.launch(arrayOf("*/*")) }
+                )
               }
             }
           }
@@ -494,6 +498,9 @@ fun ImportModelDialog(
               val finalName = if (modelName.isNotBlank()) modelName else "Modelo ${selectedFormat.name} Local"
               val finalPath = if (modelFilePath.isNotBlank()) modelFilePath else "/sdcard/Download/model${selectedFormat.extension}"
               val finalTokenizer = if (tokenizerFilePath.isNotBlank()) tokenizerFilePath else null
+              val finalConfig = if (configFilePath.isNotBlank()) configFilePath else null
+              val finalTokConfig = if (tokenizerConfigFilePath.isNotBlank()) tokenizerConfigFilePath else null
+              val finalGenConfig = if (generationConfigFilePath.isNotBlank()) generationConfigFilePath else null
 
               onImport(
                 finalName,
@@ -502,6 +509,9 @@ fun ImportModelDialog(
                 quantization,
                 finalPath,
                 finalTokenizer,
+                finalConfig,
+                finalTokConfig,
+                finalGenConfig,
                 systemPrompt
               )
             },
@@ -516,6 +526,78 @@ fun ImportModelDialog(
             Text("Cargar Modelo", fontWeight = FontWeight.Bold)
           }
         }
+      }
+    }
+  }
+}
+
+@Composable
+private fun FileSelectorField(
+  title: String,
+  badgeText: String,
+  badgeColor: androidx.compose.ui.graphics.Color,
+  filePath: String,
+  placeholder: String,
+  testTag: String,
+  buttonTestTag: String,
+  onBrowseClick: () -> Unit
+) {
+  Column {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface
+      )
+      Box(
+        modifier = Modifier
+          .clip(RoundedCornerShape(4.dp))
+          .background(badgeColor.copy(alpha = 0.15f))
+          .padding(horizontal = 6.dp, vertical = 2.dp)
+      ) {
+        Text(
+          text = badgeText,
+          style = MaterialTheme.typography.labelSmall,
+          color = badgeColor,
+          fontWeight = FontWeight.Bold,
+          fontSize = 10.sp
+        )
+      }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      OutlinedTextField(
+        value = if (filePath.isNotBlank()) filePath.substringAfterLast("/") else "",
+        onValueChange = {},
+        placeholder = { Text(placeholder, fontSize = 12.sp) },
+        modifier = Modifier
+          .weight(1f)
+          .testTag(testTag),
+        readOnly = true,
+        singleLine = true,
+        shape = RoundedCornerShape(12.dp)
+      )
+      Button(
+        onClick = onBrowseClick,
+        modifier = Modifier.testTag(buttonTestTag),
+        shape = RoundedCornerShape(12.dp)
+      ) {
+        Icon(
+          imageVector = Icons.Default.FolderOpen,
+          contentDescription = "Explorar",
+          modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Elegir")
       }
     }
   }
