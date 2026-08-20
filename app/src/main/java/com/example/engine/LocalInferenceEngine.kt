@@ -112,15 +112,25 @@ class LocalInferenceEngine(
         }
 
         if (handle != 0L) {
-          val rawResult = cppBridge.evaluatePromptNative(
+          val stringBuilder = StringBuilder()
+          val rawResult = cppBridge.generateStreamingPromptNative(
             contextHandle = handle,
             prompt = formattedPrompt,
             temperature = parameters.temperature,
             topP = parameters.topP,
-            maxTokens = parameters.maxTokens
+            repeatPenalty = parameters.repeatPenalty,
+            maxTokens = parameters.maxTokens,
+            callback = object : NativeCppBridge.NativeTokenCallback {
+              override fun onToken(piece: String, tokenId: Int): Boolean {
+                stringBuilder.append(piece)
+                return true
+              }
+            }
           )
           if (rawResult.isNotBlank()) {
             realOutput = rawResult
+          } else if (stringBuilder.isNotEmpty()) {
+            realOutput = stringBuilder.toString()
           }
         }
       } catch (e: Throwable) {

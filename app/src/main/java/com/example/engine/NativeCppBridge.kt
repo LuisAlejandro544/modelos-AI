@@ -36,15 +36,70 @@ object NativeCppBridge {
     }
   }
 
+  interface NativeTokenCallback {
+    fun onToken(piece: String, tokenId: Int): Boolean
+  }
+
   // Native JNI Declarations
   external fun getEngineCapabilities(): String
   external fun parseGgufMetadataFromFd(fd: Int): String
   external fun parseGgufMetadataFromPath(path: String): String
   external fun initGgufModelFromFd(fd: Int, nThreads: Int, contextSize: Int, useMmap: Boolean): Long
   external fun initModelContextNative(modelPath: String, nThreads: Int, contextSize: Int): Long
+  external fun tokenizeNative(contextHandle: Long, text: String, addBos: Boolean): IntArray
+  external fun decodeTokensNative(contextHandle: Long, tokens: IntArray): String
+  external fun decodeTokenNative(contextHandle: Long, tokenId: Int): String
   external fun evaluatePromptNative(contextHandle: Long, prompt: String, temperature: Float, topP: Float, maxTokens: Int): String
+  external fun generateStreamingPromptNative(
+    contextHandle: Long,
+    prompt: String,
+    temperature: Float,
+    topP: Float,
+    repeatPenalty: Float,
+    maxTokens: Int,
+    callback: NativeTokenCallback
+  ): String
   external fun cancelGgufInference(contextHandle: Long)
   external fun freeModelContextNative(contextHandle: Long)
+
+  /**
+   * Safely tokenizes text into token IDs using the C++ native BPE / SentencePiece engine
+   */
+  fun tokenizeSafe(contextHandle: Long, text: String, addBos: Boolean = true): IntArray {
+    if (!isNativeLoaded || contextHandle == 0L || text.isBlank()) return IntArray(0)
+    return try {
+      tokenizeNative(contextHandle, text, addBos)
+    } catch (e: Throwable) {
+      Log.e(TAG, "Error tokenizando con motor C++ BPE", e)
+      IntArray(0)
+    }
+  }
+
+  /**
+   * Safely decodes token IDs back into UTF-8 text using the C++ native tokenizer
+   */
+  fun decodeTokensSafe(contextHandle: Long, tokens: IntArray): String {
+    if (!isNativeLoaded || contextHandle == 0L || tokens.isEmpty()) return ""
+    return try {
+      decodeTokensNative(contextHandle, tokens)
+    } catch (e: Throwable) {
+      Log.e(TAG, "Error decodificando tokens con motor C++ BPE", e)
+      ""
+    }
+  }
+
+  /**
+   * Safely decodes a single token ID into string piece
+   */
+  fun decodeTokenSafe(contextHandle: Long, tokenId: Int): String {
+    if (!isNativeLoaded || contextHandle == 0L) return ""
+    return try {
+      decodeTokenNative(contextHandle, tokenId)
+    } catch (e: Throwable) {
+      Log.e(TAG, "Error decodificando token ID $tokenId", e)
+      ""
+    }
+  }
 
   fun getSafeEngineCapabilities(): String {
     return if (isNativeLoaded) {

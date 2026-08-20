@@ -11,6 +11,24 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
 1. ⚡ **Modo GGUF (`.gguf` - Motor Nativo C++ llama.cpp):**
    - Carga directa con 1 solo archivo autocontenido.
    - **Parser Binario Nativo GGUF (v2 y v3):** Lectura e inspección en milisegundos de metadatos de cabecera (`0x46554747`), arquitectura (`llama`, `qwen2`, `gemma2`, `phi3`), longitud de contexto, capas de atención y plantillas de chat sin consumir memoria RAM.
+   - **Tokenizador BPE / SentencePiece Nativo en C++ (`bpe_tokenizer.cpp`):**
+     - Desempaquetado directo de arreglos de vocabulario (`tokenizer.ggml.tokens`), rangos de fusiones BPE (`tokenizer.ggml.merges`), scores y tipos de token desde la memoria mapeada.
+     - Codificación de texto a tokens mediante fusiones de pares de mayor prioridad y manejo de espacios SentencePiece (` ` / `\u2581`).
+     - Soporte de byte-fallback bidireccional (`<0xNN>` a bytes reales) y tokens especiales (`<|im_start|>`, `<|im_end|>`, `<s>`, `</s>`, `[INST]`, etc.).
+     - Decodificación en tiempo real de IDs a fragmentos de texto UTF-8 válidos.
+   - **Rutinas de Decuantización y MatMul Vectorizado ARM NEON (`dequant_matmul.h`):**
+     - Decuantización al vuelo de bloques `Q4_0`, `Q8_0` y `Q4_K` con conversión flotante FP16->FP32.
+     - Multiplicación matricial vectorial acelerada por registros e instrucciones SIMD ARM NEON (`vmlaq_f32`, `vld1q_f32`).
+   - **Capas del Transformer y Forward Pass en C++ (`transformer_forward.h`):**
+     - Embedding Lookup con descompresión de vectores de pesos por ID de token.
+     - Normalización **RMSNorm** (`rmsNorm`) para pre/post atención y capas feed-forward.
+     - Proyecciones de Atención (Q, K, V) con incrustación posicional rotacional **RoPE** (`applyRope`).
+     - Capas Feed-Forward SwiGLU / MLP con activación no lineal `SiLU` (`silu(x)`).
+     - Proyección LM Head (`output.weight`) para cálculo de logits sobre el vocabulario.
+   - **Muestreador de Logits y Streaming JNI Token por Token (`sampler.h` / `local_ai_engine.cpp`):**
+     - Muestreador nativo con escalado por Temperatura, filtro de núcleo **Top-P**, **Top-K** y penalización por repetición (*Repeat Penalty*).
+     - Bucle autorregresivo continuo que emite fragmentos de texto decodificados en tiempo real vía callback JNI (`NativeTokenCallback`) directo a la UI.
+     - Detección precisa de tokens de parada **EOS** y cancelación interactiva instantánea.
    - **Mapeo Flash `mmap` Zero-Copy con File Descriptors (`ParcelFileDescriptor`):** Conexión directa mediante descriptores de archivo del sistema (`content://...`) permitiendo paginación de tensores bajo demanda desde el almacenamiento flash.
    - Soporte multihilo optimizado para arquitecturas ARM64 (`arm64-v8a`), ARMv7 (`armeabi-v7a`) y x86_64 con aceleración vectorial NEON y Vulkan GPU.
 
@@ -55,13 +73,13 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
                                             │
                                             ├────────────────────────────────┐
                                             ▼                                ▼
-                              ┌───────────────────────────┐    ┌───────────────────────────┐
-                              │   C++ Engine (llama.cpp)  │    │    Rust Engine (Candle)   │
-                              │  • GGUF v2/v3 Parser      │    │  • SafeTensors Real Forward│
-                              │  • Vulkan / GPU / NEON    │    │  • RMSNorm & LM Head MatMul│
-                              │  • mmap Flash Mapping     │    │  • BPE Tokenizers Native  │
-                              │  • Carga 1-click GGUF     │    │  • Zero-Copy Memory Map   │
-                              └───────────────────────────┘    └───────────────────────────┘
+                    ┌───────────────────────────────────────┐    ┌───────────────────────────┐
+                    │        C++ Engine (llama.cpp)         │    │    Rust Engine (Candle)   │
+                    │  • GGUF v2/v3 Flash Parser            │    │  • SafeTensors Real Forward│
+                    │  • BPE & SentencePiece Tokenizer      │    │  • RMSNorm & LM Head MatMul│
+                    │  • Vulkan / GPU / ARM NEON Vectorial  │    │  • BPE Tokenizers Native  │
+                    │  • mmap Flash Zero-Copy Paging        │    │  • Zero-Copy Memory Map   │
+                    └───────────────────────────────────────┘    └───────────────────────────┘
 ```
 
 ---

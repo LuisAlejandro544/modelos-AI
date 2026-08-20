@@ -155,6 +155,8 @@ GgufModelMetadata GgufParser::parseFromBuffer(const uint8_t* buffer, size_t buff
             } else {
                 skipGgufValue(ptr, end, valType, meta.version);
             }
+        } else if (key == "tokenizer.ggml.model" && valType == GgufType::STRING) {
+            meta.tokenizerModel = readGgufString(ptr, end, meta.version);
         } else if (key == "tokenizer.ggml.bos_token_id") {
             if (valType == GgufType::UINT32 || valType == GgufType::INT32) {
                 meta.bosTokenId = *reinterpret_cast<const int32_t*>(ptr);
@@ -174,6 +176,97 @@ GgufModelMetadata GgufParser::parseFromBuffer(const uint8_t* buffer, size_t buff
                 ptr += 8;
             } else {
                 skipGgufValue(ptr, end, valType, meta.version);
+            }
+        } else if (key == "tokenizer.ggml.unknown_token_id") {
+            if (valType == GgufType::UINT32 || valType == GgufType::INT32) {
+                meta.unkTokenId = *reinterpret_cast<const int32_t*>(ptr);
+                ptr += 4;
+            } else if (valType == GgufType::UINT64 || valType == GgufType::INT64) {
+                meta.unkTokenId = *reinterpret_cast<const int64_t*>(ptr);
+                ptr += 8;
+            } else {
+                skipGgufValue(ptr, end, valType, meta.version);
+            }
+        } else if (key == "tokenizer.ggml.padding_token_id") {
+            if (valType == GgufType::UINT32 || valType == GgufType::INT32) {
+                meta.padTokenId = *reinterpret_cast<const int32_t*>(ptr);
+                ptr += 4;
+            } else if (valType == GgufType::UINT64 || valType == GgufType::INT64) {
+                meta.padTokenId = *reinterpret_cast<const int64_t*>(ptr);
+                ptr += 8;
+            } else {
+                skipGgufValue(ptr, end, valType, meta.version);
+            }
+        } else if (key == "tokenizer.ggml.tokens" && valType == GgufType::ARRAY) {
+            if (ptr + 12 <= end) {
+                GgufType itemType = static_cast<GgufType>(*reinterpret_cast<const uint32_t*>(ptr));
+                ptr += 4;
+                uint64_t count = *reinterpret_cast<const uint64_t*>(ptr);
+                ptr += 8;
+                meta.vocabSize = count;
+                if (itemType == GgufType::STRING) {
+                    meta.tokens.reserve(std::min(count, uint64_t(320000)));
+                    for (uint64_t t = 0; t < count && ptr < end; ++t) {
+                        meta.tokens.push_back(readGgufString(ptr, end, meta.version));
+                    }
+                } else {
+                    for (uint64_t t = 0; t < count && ptr < end; ++t) {
+                        skipGgufValue(ptr, end, itemType, meta.version);
+                    }
+                }
+            }
+        } else if (key == "tokenizer.ggml.merges" && valType == GgufType::ARRAY) {
+            if (ptr + 12 <= end) {
+                GgufType itemType = static_cast<GgufType>(*reinterpret_cast<const uint32_t*>(ptr));
+                ptr += 4;
+                uint64_t count = *reinterpret_cast<const uint64_t*>(ptr);
+                ptr += 8;
+                if (itemType == GgufType::STRING) {
+                    meta.merges.reserve(std::min(count, uint64_t(320000)));
+                    for (uint64_t t = 0; t < count && ptr < end; ++t) {
+                        meta.merges.push_back(readGgufString(ptr, end, meta.version));
+                    }
+                } else {
+                    for (uint64_t t = 0; t < count && ptr < end; ++t) {
+                        skipGgufValue(ptr, end, itemType, meta.version);
+                    }
+                }
+            }
+        } else if (key == "tokenizer.ggml.scores" && valType == GgufType::ARRAY) {
+            if (ptr + 12 <= end) {
+                GgufType itemType = static_cast<GgufType>(*reinterpret_cast<const uint32_t*>(ptr));
+                ptr += 4;
+                uint64_t count = *reinterpret_cast<const uint64_t*>(ptr);
+                ptr += 8;
+                if (itemType == GgufType::FLOAT32) {
+                    meta.tokenScores.reserve(std::min(count, uint64_t(320000)));
+                    for (uint64_t t = 0; t < count && ptr + 4 <= end; ++t) {
+                        meta.tokenScores.push_back(*reinterpret_cast<const float*>(ptr));
+                        ptr += 4;
+                    }
+                } else {
+                    for (uint64_t t = 0; t < count && ptr < end; ++t) {
+                        skipGgufValue(ptr, end, itemType, meta.version);
+                    }
+                }
+            }
+        } else if (key == "tokenizer.ggml.token_type" && valType == GgufType::ARRAY) {
+            if (ptr + 12 <= end) {
+                GgufType itemType = static_cast<GgufType>(*reinterpret_cast<const uint32_t*>(ptr));
+                ptr += 4;
+                uint64_t count = *reinterpret_cast<const uint64_t*>(ptr);
+                ptr += 8;
+                if (itemType == GgufType::INT32) {
+                    meta.tokenTypes.reserve(std::min(count, uint64_t(320000)));
+                    for (uint64_t t = 0; t < count && ptr + 4 <= end; ++t) {
+                        meta.tokenTypes.push_back(*reinterpret_cast<const int32_t*>(ptr));
+                        ptr += 4;
+                    }
+                } else {
+                    for (uint64_t t = 0; t < count && ptr < end; ++t) {
+                        skipGgufValue(ptr, end, itemType, meta.version);
+                    }
+                }
             }
         } else {
             // Skip other metadata values cleanly
@@ -209,8 +302,8 @@ GgufModelMetadata GgufParser::parseFromFd(int fd) {
         return meta;
     }
 
-    // Map first 4MB for fast metadata parsing without loading entire multi-GB file
-    size_t mapSize = 4 * 1024 * 1024;
+    // Map first 32MB for fast metadata and full BPE/SentencePiece vocabulary parsing without loading entire multi-GB file
+    size_t mapSize = 32 * 1024 * 1024;
     struct stat st;
     if (fstat(fd, &st) == 0 && static_cast<size_t>(st.st_size) < mapSize) {
         mapSize = st.st_size;

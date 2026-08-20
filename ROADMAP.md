@@ -13,7 +13,7 @@ Este documento detalla el estado actual del desarrollo y las metas para la aplic
 
 ---
 
-## 🟢 Fase 2: Flujo Dual de Carga e Inferencia Móvil Real (Completada / En Refinamiento)
+## 🟢 Fase 2: Flujo Dual de Carga e Inferencia Móvil Real (Completada)
 - [x] **Motor Nativo C++ llama.cpp con Soporte GGUF (v2 y v3):**
   - [x] Parser binario nativo C++ (`gguf_parser.cpp` / `gguf_types.h`) con lectura zero-copy de cabecera `0x46554747`.
   - [x] Extracción en milisegundos de arquitectura (`llama`, `qwen2`, `phi3`, `gemma2`), longitud de contexto y tokens especiales BOS/EOS.
@@ -31,16 +31,43 @@ Este documento detalla el estado actual del desarrollo y las metas para la aplic
 
 ---
 
-## 🟡 Fase 2.5: Motor GGUF Autorregresivo Completo en C++ (Próxima)
-- [ ] **Desempaquetado de Vocabulario Nativo GGUF en C++:**
-  - [ ] Lectura del arreglo `tokenizer.ggml.tokens` y tipos de token directamente desde los metadatos parseados en C++.
-  - [ ] Implementación de decodificador y tokenizador BPE nativo en C++ para convertir IDs en strings UTF-8.
-- [ ] **Multiplicación Matricial y Dequantización en C++:**
-  - [ ] Bucle de dequantización para bloques `Q4_0`, `Q4_K_M`, `Q5_K_M` y `Q8_0` acelerado por instrucciones vectoriales ARM NEON (`arm64-v8a`).
-  - [ ] Forward pass por capas de atención (`blk.N.attn_q.weight`, `blk.N.attn_k.weight`, etc.) y normalización RMSNorm en C++.
-- [ ] **Muestreo de Logits y Emisión Token por Token (Sampling Loop C++):**
-  - [ ] Implementación de Softmax, muestreo con Temperatura, Top-P y penalización de repetición nativa en C++.
-  - [ ] Streaming directo token por token a la JVM mediante callback JNI continuo durante la generación.
+## 🟢 Fase 2.5: Tokenización BPE / SentencePiece Nativa en C++ (Completada)
+- [x] **Desempaquetado de Vocabulario y Merges GGUF en C++:**
+  - [x] Lectura de arreglos `tokenizer.ggml.tokens`, `tokenizer.ggml.merges`, `tokenizer.ggml.scores` y `tokenizer.ggml.token_type` directamente desde metadatos GGUF en memoria mapeada.
+  - [x] Extracción de tokens especiales (`<s>`, `</s>`, `<|im_start|>`, `<|im_end|>`, `[INST]`, `<think>`, etc.).
+- [x] **Algoritmo de Tokenización BPE y SentencePiece en C++ (`bpe_tokenizer.cpp` / `bpe_tokenizer.h`):**
+  - [x] Codificación de texto UTF-8 a secuencia de IDs de tokens mediante fusiones iterativas por rango de prioridad de merges.
+  - [x] Soporte para prefijo y sustitución de espacios SentencePiece (` ` / `\u2581`).
+  - [x] Mecanismo de byte-fallback bidireccional (`<0xNN>` a bytes crudos y viceversa) para caracteres no contemplados en el vocabulario base.
+  - [x] Decodificación de secuencias de tokens e IDs individuales a cadenas de texto UTF-8 coherentes.
+- [x] **Integración JNI Completa:**
+  - [x] Métodos `tokenizeNative`, `decodeTokensNative` y `decodeTokenNative` en `NativeCppBridge.kt` y `local_ai_engine.cpp`.
+  - [x] Conexión directa en el contexto de ejecución nativo (`GgufExecutionContext`).
+
+---
+
+## 🟢 Fase 2.6: Dequantización y Forward Pass del Transformer en C++ (Completada)
+- [x] **Multiplicación Matricial y Dequantización en C++ (`dequant_matmul.h`):**
+  - [x] Bucle de dequantización y MatMul para bloques `Q4_0`, `Q8_0` y `Q4_K` con conversión flotante FP16->FP32.
+  - [x] Multiplicación vector-matriz acelerada por instrucciones vectoriales **ARM NEON** (`arm64-v8a` con `vmlaq_f32`, `vld1q_f32`).
+- [x] **Capas del Transformer y Forward Pass en C++ (`transformer_forward.h`):**
+  - [x] Capa de Embedding Lookup con dequantización de filas de pesos por ID de token.
+  - [x] Normalización **RMSNorm** (`rmsNorm`) para pre/post atención y pre/post FFN.
+  - [x] Proyecciones de Atención (Q, K, V) con incrustación posicional rotacional **RoPE** (`applyRope`).
+  - [x] Capa Feed-Forward SwiGLU / MLP con función de activación `SiLU` (`silu(x) = x * sigmoid(x)`).
+  - [x] Proyección final LM Head (`output.weight`) para generación de Logits por capa sobre el vocabulario.
+
+---
+
+## 🟢 Fase 2.7: Muestreo de Logits y Streaming Token por Token en C++ (Completada)
+- [x] **Muestreo de Logits en C++ (`sampler.h`):**
+  - [x] Implementación de **Penalización por Repetición** (*Repeat Penalty*) sobre tokens recientes.
+  - [x] Normalización de temperatura y cálculo de probabilidades probabilísticas con **Softmax**.
+  - [x] Filtros combinados **Top-K** y **Top-P (Nucleus Sampling)** con generación pseudoaleatoria `std::mt19937`.
+- [x] **Bucle Autorregresivo de Generación y Streaming JNI Token por Token:**
+  - [x] Método nativo `generateStreamingPromptNative` en `local_ai_engine.cpp` y `NativeCppBridge.kt`.
+  - [x] Callback JNI reactivo (`NativeTokenCallback.onToken(piece, tokenId)`) para emisión continua de texto sin esperas.
+  - [x] Detección de token de parada **EOS** (`</s>`, `<|im_end|>`) y parada interactiva en caliente (`isCancelled`).
 
 ---
 

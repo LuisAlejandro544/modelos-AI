@@ -12,12 +12,17 @@ Organización modular del código fuente de la aplicación Android.
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── AndroidManifest.xml
-│   │   │   ├── cpp/                # Motor nativo C++ (llama.cpp NDK / CMake / GGUF v2/v3)
+│   │   │   ├── cpp/                # Motor nativo C++ (llama.cpp NDK / CMake / GGUF v2/v3 / Tokenizador BPE/SPM / MatMul NEON / Forward Pass / Sampler)
 │   │   │   │   ├── CMakeLists.txt          # Script de construcción CMake para C++
-│   │   │   │   ├── gguf_types.h            # Definición de especificación GGUF, magic 0x46554747 y tipos GGML
+│   │   │   │   ├── gguf_types.h            # Definición de especificación GGUF, magic 0x46554747, tipos GGML y metadata
 │   │   │   │   ├── gguf_parser.h           # Cabecera del parser binario de metadatos GGUF
-│   │   │   │   ├── gguf_parser.cpp         # Lector zero-copy mmap de arquitectura, tensores y vocabulario
-│   │   │   │   └── local_ai_engine.cpp     # Enlaces JNI C++, gestión de contexto nativo y control de cancelación
+│   │   │   │   ├── gguf_parser.cpp         # Lector zero-copy mmap de arquitectura, tensores, vocabulario y merges
+│   │   │   │   ├── bpe_tokenizer.h         # Cabecera del tokenizador nativo C++ (BPE, SentencePiece, byte fallback y tokens especiales)
+│   │   │   │   ├── bpe_tokenizer.cpp       # Algoritmo de codificación/decodificación BPE/SentencePiece y merges
+│   │   │   │   ├── dequant_matmul.h        # Rutinas de decuantización Q4_0, Q8_0, Q4_K y MatMul vectorizado ARM NEON
+│   │   │   │   ├── transformer_forward.h   # Capas del Transformer (RMSNorm, RoPE, Attention, SwiGLU/FFN y LM Head)
+│   │   │   │   ├── sampler.h               # Muestreador de logits (Temperatura, Top-P, Top-K, Repeat Penalty y Softmax)
+│   │   │   │   └── local_ai_engine.cpp     # Enlaces JNI C++, bucle autorregresivo, streaming token por token y cancelación
 │   │   │   ├── rust/               # Motor nativo Rust (Candle / UniFFI)
 │   │   │   │   ├── Cargo.toml
 │   │   │   │   └── src/
@@ -34,7 +39,7 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   │       └── ModelRepository.kt        # Gestión reactiva y ciclo de vida de modelos locales (GGUF / SafeTensors)
 │   │   │   │   ├── engine/
 │   │   │   │   │   ├── LocalInferenceEngine.kt       # Coordinador central de inferencia local y streaming
-│   │   │   │   │   ├── NativeCppBridge.kt            # JNI C++ (llama.cpp, NEON, Vulkan, parser GGUF mmap)
+│   │   │   │   │   ├── NativeCppBridge.kt            # JNI C++ (llama.cpp, NEON, Vulkan, tokenizador BPE/SPM nativo)
 │   │   │   │   │   ├── RustInferenceBridge.kt        # JNI Rust (Candle, memoria segura y ParcelFileDescriptor)
 │   │   │   │   │   ├── formatter/
 │   │   │   │   │   │   └── ChatTemplateFormatter.kt  # Formateo de plantillas de chat (ChatML, Llama-3, Gemma, Mistral)
@@ -79,10 +84,10 @@ Organización modular del código fuente de la aplicación Android.
 │   │       ├── java/com/example/
 │   │       │   ├── ExampleUnitTest.kt                # Pruebas unitarias de Formatter, Metrics y Repository
 │   │       │   └── ExampleRobolectricTest.kt         # Pruebas de integración Robolectric
-├── AGENTS.md                       # Directivas obligatorias para agentes de IA
-├── AI_CONTEXT.md                   # Resumen técnico y arquitectura para agentes
-├── commit_message.txt              # Mensaje descriptivo para el commit automático
-├── README.md                       # Documentación principal del proyecto
-├── ROADMAP.md                      # Plan de ruta y fases del proyecto
-└── STRUCTURE.md                    # Este archivo
+│   ├── AGENTS.md                       # Directivas obligatorias para agentes de IA
+│   ├── AI_CONTEXT.md                   # Resumen técnico y arquitectura para agentes
+│   ├── commit_message.txt              # Mensaje descriptivo para el commit automático
+│   ├── README.md                       # Documentación principal del proyecto
+│   ├── ROADMAP.md                      # Plan de ruta y fases del proyecto
+│   └── STRUCTURE.md                    # Este archivo
 ```

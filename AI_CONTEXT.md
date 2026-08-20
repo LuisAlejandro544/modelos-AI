@@ -10,6 +10,13 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
 1. **Modo GGUF (`.gguf` - Motor Nativo C++ llama.cpp):**
    - Selección de un único archivo `.gguf` que contiene pesos, vocabulario y metadatos de arquitectura en un solo binario.
    - **Parser de Cabeceras GGUF v2/v3 en C++:** Decodificación zero-copy de número mágico `0x46554747`, tensores, kv-metadata y plantillas de chat.
+   - **Tokenizador Nativo BPE / SentencePiece en C++ (`bpe_tokenizer.cpp`):**
+     - Deserialización de vocabulario (`tokenizer.ggml.tokens`), fusiones (`tokenizer.ggml.merges`) y scores en memoria virtual.
+     - Tokenización autorregresiva BPE/SentencePiece con byte-fallback (`<0xNN>`) y tokens de control (`<|im_start|>`, `<|im_end|>`, `<s>`, `</s>`, etc.).
+     - Decodificación instantánea de IDs a cadenas de texto UTF-8 válidas.
+   - **Dequantización y MatMul en C++ (`dequant_matmul.h`):** Decuantización `Q4_0`, `Q8_0`, `Q4_K` con vectorización SIMD **ARM NEON** (`arm64-v8a`).
+   - **Capas del Transformer y Forward Pass en C++ (`transformer_forward.h`):** RMSNorm, RoPE, proyecciones de Atención, SwiGLU / FFN (`SiLU`) y LM Head para cálculo de logits.
+   - **Muestreador de Logits y Streaming JNI (`sampler.h`):** Algoritmo de muestreo (Temperatura, Top-P, Top-K, penalización por repetición) y emisión de tokens reactiva vía JNI.
    - **Gestión Nativa de Memoria (`mmap`):** Mapeo virtual del modelo desde descriptores de archivo Android (`ParcelFileDescriptor`) sin duplicación en RAM de la JVM.
    - Soporte multihilo para arquitecturas ARM64 con aceleración NEON y Vulkan GPU.
 
@@ -28,7 +35,7 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
 ## ⚡ Componentes Clave
 
 1. **Gestión de Ventana de Contexto y Tokens:**
-   - Cálculo continuo de tokens estimados de la conversación (`approximateConversationTokens`).
+   - Cálculo continuo de tokens estimados y tokenización nativa de la conversación.
    - Medidor superior con porcentaje de contexto utilizado y advertencias visuales al acercarse al límite (`contextLimit`).
 
 2. **Monitoreo de Rendimiento (Tokens/Segundo):**
@@ -48,7 +55,7 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
 - **Lenguaje:** Kotlin (Coroutines y Flow).
 - **UI:** Jetpack Compose con Material Design 3 (M3).
 - **Patrón:** MVVM con `StateFlow` y `collectAsStateWithLifecycle`.
-- **C++ NDK:** `local_ai_engine.cpp`, `gguf_parser.cpp`, `gguf_types.h` para `llama.cpp` y GGUF v2/v3.
+- **C++ NDK:** `local_ai_engine.cpp`, `gguf_parser.cpp`, `bpe_tokenizer.cpp`, `gguf_types.h` para `llama.cpp`, tokenización BPE/SPM y GGUF v2/v3.
 - **Rust NDK:** `local_ai_rust` (`Candle 0.8.2` con `safetensors`, `tokenizers` y `memmap2`).
 - **CI/CD:** GitHub Actions con soporte multi-ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
 - **Testing:** Robolectric para tests locales en JVM y Roborazzi para capturas.

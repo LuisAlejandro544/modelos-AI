@@ -72,6 +72,7 @@ struct GgufModelMetadata {
     std::string modelName = "GGUF Model";
     std::string chatTemplate = "";
     std::string quantizationType = "Q4_K_M";
+    std::string tokenizerModel = "llama";
     
     uint64_t contextLength = 4096;
     uint64_t embeddingLength = 2048;
@@ -82,6 +83,13 @@ struct GgufModelMetadata {
     
     int64_t bosTokenId = 1;
     int64_t eosTokenId = 2;
+    int64_t unkTokenId = 0;
+    int64_t padTokenId = -1;
+    
+    std::vector<std::string> tokens;
+    std::vector<float> tokenScores;
+    std::vector<int32_t> tokenTypes;
+    std::vector<std::string> merges;
     
     std::string rawJsonSummary = "";
     std::string errorMessage = "";

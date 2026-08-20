@@ -11,6 +11,7 @@ add_library(
     local_ai_cpp
     SHARED
     gguf_parser.cpp
+    bpe_tokenizer.cpp
     local_ai_engine.cpp
 )
 

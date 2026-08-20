@@ -1,11 +1,17 @@
 name: Build Android Debug APK
 
 on:
-  workflow_dispatch: # Se activa exclusivamente de forma manual desde la pestaña Actions en GitHub
+  workflow_dispatch:
+    inputs:
+      enable_cache:
+        description: '¿Habilitar y usar Caché de compilación? (C++, Rust, Gradle)'
+        required: true
+        type: boolean
+        default: true
 
 jobs:
   build:
-    name: Compilar APK Debug con Motores C++ (llama.cpp) y Rust (Candle) con NDK y Caché
+    name: Compilar APK Debug con Motores C++ (llama.cpp) y Rust (Candle) con NDK y Caché Configurable
     runs-on: ubuntu-latest
 
     steps:
@@ -20,53 +26,80 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. Configurar Android SDK, NDK y CMake para C++ (llama.cpp / GGUF)
+      # 3. Instalar herramientas de compilación C++ nativas del sistema (Ninja, CCache, Clang)
+      - name: Instalar dependencias C++ del sistema (Ninja, CCache, Clang)
+        run: |
+          echo "=== Instalando herramientas de compilación C++ nativas para Linux/Android ==="
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache clang llvm lld pkg-config build-essential
+          echo "Ninja: $(ninja --version)"
+          echo "CCache: $(ccache --version | head -n 1)"
+          echo "Clang: $(clang --version | head -n 1)"
+
+      # 4. Configurar Android SDK, NDK y CMake para C++ (llama.cpp / GGUF)
       - name: Configurar Android NDK y CMake para C++
         run: |
-          echo "=== Instalando y verificando componentes Android NDK y CMake para C++ ==="
+          echo "=== Instalando y configurando Android NDK y CMake para C++ ==="
           echo "ANDROID_HOME: $ANDROID_HOME"
           yes | sdkmanager --licenses || true
-          yes | sdkmanager --install "cmake;3.22.1" "ndk;28.2.13676358" || true
+          yes | sdkmanager --install "cmake;3.22.1" "ndk;28.2.13676358" "build-tools;36.0.0" || true
+          
+          # Detectar y configurar ruta del NDK
+          NDK_DIR="$ANDROID_HOME/ndk/28.2.13676358"
+          if [ ! -d "$NDK_DIR" ]; then
+            NDK_DIR=$(find "$ANDROID_HOME/ndk" -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
+          fi
+          
+          echo "NDK detectado en: $NDK_DIR"
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$NDK_DIR" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmake/3.22.1/bin" >> $GITHUB_PATH
+          echo "$NDK_DIR" >> $GITHUB_PATH
           echo "CMake y NDK configurados correctamente."
 
-      # 4. Configurar Caché para artefactos de compilación C++ (CMake y Ninja)
-      - name: Caché para compilación C++ (CMake & Ninja)
+      # 5. Configurar Caché para artefactos de compilación C++ (CMake, Ninja y CCache)
+      - name: Caché para compilación C++ (CMake, Ninja & CCache)
+        if: ${{ inputs.enable_cache != false }}
         uses: actions/cache@v4
         with:
           path: |
+            ~/.ccache
             app/.cxx
             app/build/intermediates/cxx
             app/build/intermediates/cmake
-          key: ${{ runner.os }}-cpp-cmake-${{ hashFiles('app/src/main/cpp/**', 'app/build.gradle.kts') }}
+          key: ${{ runner.os }}-cpp-cmake-ccache-${{ hashFiles('app/src/main/cpp/**', 'app/build.gradle.kts') }}
           restore-keys: |
+            ${{ runner.os }}-cpp-cmake-ccache-
             ${{ runner.os }}-cpp-cmake-
 
-      # 5. Configurar Rust Toolchain y Targets Android para Hugging Face Candle
+      # 6. Configurar Rust Toolchain y Targets Android para Hugging Face Candle
       - name: Instalar Rust y targets Android
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
-      # 6. Configurar Caché inteligente para Rust, crates y artefactos Candle
+      # 7. Configurar Caché inteligente para Rust, crates y artefactos Candle
       - name: Configurar Caché para Rust y dependencias Cargo
+        if: ${{ inputs.enable_cache != false }}
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             app/src/main/rust -> target
 
       - name: Caché para binario cargo-ndk
+        if: ${{ inputs.enable_cache != false }}
         uses: actions/cache@v4
         id: cache-cargo-ndk
         with:
           path: ~/.cargo/bin/cargo-ndk
           key: ${{ runner.os }}-cargo-ndk-bin
 
-      - name: Instalar cargo-ndk (si no está en caché)
-        if: steps.cache-cargo-ndk.outputs.cache-hit != 'true'
+      - name: Instalar cargo-ndk
+        if: ${{ inputs.enable_cache == false || steps.cache-cargo-ndk.outputs.cache-hit != 'true' }}
         run: |
           cargo install cargo-ndk || true
 
-      # 7. Compilar librería nativa Rust Candle (liblocal_ai_rust.so) para ABIs Android
+      # 8. Compilar librería nativa Rust Candle (liblocal_ai_rust.so) para ABIs Android
       - name: Compilar librería nativa Rust Candle
         run: |
           echo "=== Compilando Hugging Face Candle SafeTensors para Android con cargo-ndk ==="
@@ -75,14 +108,23 @@ jobs:
           cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../jniLibs build --release || true
           cd ../../../..
 
-      # 8. Configurar Gradle oficial con la versión exacta del proyecto (9.3.1) y caché activo
+      # 9. Configurar Gradle oficial con la versión exacta del proyecto (9.3.1) y caché configurable
       - name: Configurar Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
+          cache-disabled: ${{ inputs.enable_cache == false }}
           cache-read-only: false
 
-      # 9. Generar la llave de firma Debug (debug.keystore) en la raíz del proyecto
+      # 10. Limpieza previa si se ejecuta en modo sin caché
+      - name: Limpieza de compilación (Modo Sin Caché)
+        if: ${{ inputs.enable_cache == false }}
+        run: |
+          echo "=== Modo sin caché activo: eliminando cachés locales de ccache y build ==="
+          ccache -C || true
+          rm -rf app/.cxx app/build
+
+      # 11. Generar la llave de firma Debug (debug.keystore) en la raíz del proyecto
       - name: Generar debug.keystore en la raíz del proyecto
         run: |
           echo "=== Configurando debug.keystore para compilación ==="
@@ -120,27 +162,33 @@ jobs:
           ls -la debug.keystore
           keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
 
-      # 10. Dar permisos de ejecución al wrapper de Gradle (si existe)
+      # 12. Dar permisos de ejecución al wrapper de Gradle (si existe)
       - name: Preparar Gradle Wrapper
         run: |
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
           fi
 
-      # 11. Compilar el APK en modo Debug (C++ CMake y Gradle)
+      # 13. Compilar el APK en modo Debug (C++ CMake, NDK, Rust y Gradle)
       - name: Compilar APK Debug con Gradle
         run: |
           if [ ! -s debug.keystore ]; then
             keytool -genkeypair -v -noprompt -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
           
+          GRADLE_FLAGS="--no-daemon --stacktrace"
+          if [ "${{ inputs.enable_cache }}" = "false" ]; then
+            echo "=== Desactivando build-cache en Gradle ==="
+            GRADLE_FLAGS="$GRADLE_FLAGS --no-build-cache"
+          fi
+          
           if [ -f ./gradlew ]; then
-            ./gradlew assembleDebug --no-daemon --stacktrace
+            ./gradlew assembleDebug $GRADLE_FLAGS
           else
-            gradle assembleDebug --no-daemon --stacktrace
+            gradle assembleDebug $GRADLE_FLAGS
           fi
 
-      # 12. Subir el APK como artefacto descargable en GitHub Actions
+      # 14. Subir el APK como artefacto descargable en GitHub Actions
       - name: Subir APK Debug como Artefacto
         uses: actions/upload-artifact@v4
         with:
