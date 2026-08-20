@@ -22,3 +22,8 @@ Este archivo contiene las directivas obligatorias para cualquier agente de IA o 
 
 4. **Gestión de Formatos de Modelo:**
    - Si se añade soporte para nuevos formatos (como ONNX o TFLite), documentar claramente si el formato requiere un archivo de tokenizador independiente (`tokenizer.json` / `vocab.json`) o si está autocontenido como GGUF.
+
+5. **Validación y Estabilidad de Parámetros de Inferencia:**
+   - Respetar siempre los límites arquitectónicos del modelo cargado (`contextLength`, tokens, temperatura, top-p, hilos de CPU).
+   - Toda interfaz o ViewModel debe invocar `InferenceParameters.sanitize()` para prevenir valores fuera de rango o desbordamientos que provoquen cierres inesperados del motor de inferencia nativo.
+   - No aplicar restricciones artificiales basadas en estimaciones de RAM a menos que el usuario lo solicite explícitamente.

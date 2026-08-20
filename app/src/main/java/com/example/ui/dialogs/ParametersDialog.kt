@@ -62,27 +62,32 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.model.HardwareAccelerator
 import com.example.model.InferenceBackend
 import com.example.model.InferenceParameters
+import com.example.model.LocalAiModel
 import kotlin.math.roundToInt
 
 @Composable
 fun ParametersDialog(
   currentParameters: InferenceParameters,
+  selectedModel: LocalAiModel? = null,
   maxAvailableCores: Int = 8,
   onSave: (InferenceParameters) -> Unit,
   onReset: () -> Unit,
   onDismiss: () -> Unit
 ) {
-  var selectedAccelerator by remember { mutableStateOf(currentParameters.accelerator) }
-  var selectedBackend by remember { mutableStateOf(currentParameters.backend) }
-  var useMmap by remember { mutableStateOf(currentParameters.useMmap) }
-  var contextWindow by remember { mutableIntStateOf(currentParameters.contextWindow) }
-  var temperature by remember { mutableFloatStateOf(currentParameters.temperature) }
-  var topP by remember { mutableFloatStateOf(currentParameters.topP) }
-  var topK by remember { mutableIntStateOf(currentParameters.topK) }
-  var maxTokens by remember { mutableIntStateOf(currentParameters.maxTokens) }
-  var repeatPenalty by remember { mutableFloatStateOf(currentParameters.repeatPenalty) }
-  var cpuThreads by remember { mutableIntStateOf(currentParameters.cpuThreads) }
-  var systemPrompt by remember { mutableStateOf(currentParameters.systemPrompt) }
+  val modelMaxContext = selectedModel?.contextLength ?: InferenceParameters.DEFAULT_MAX_CONTEXT_WINDOW
+  val sanitizedParams = currentParameters.sanitize(selectedModel, maxAvailableCores)
+
+  var selectedAccelerator by remember { mutableStateOf(sanitizedParams.accelerator) }
+  var selectedBackend by remember { mutableStateOf(sanitizedParams.backend) }
+  var useMmap by remember { mutableStateOf(sanitizedParams.useMmap) }
+  var contextWindow by remember { mutableIntStateOf(sanitizedParams.contextWindow) }
+  var temperature by remember { mutableFloatStateOf(sanitizedParams.temperature) }
+  var topP by remember { mutableFloatStateOf(sanitizedParams.topP) }
+  var topK by remember { mutableIntStateOf(sanitizedParams.topK) }
+  var maxTokens by remember { mutableIntStateOf(sanitizedParams.maxTokens) }
+  var repeatPenalty by remember { mutableFloatStateOf(sanitizedParams.repeatPenalty) }
+  var cpuThreads by remember { mutableIntStateOf(sanitizedParams.cpuThreads) }
+  var systemPrompt by remember { mutableStateOf(sanitizedParams.systemPrompt) }
 
   Dialog(
     onDismissRequest = onDismiss,
@@ -325,16 +330,55 @@ fun ParametersDialog(
             }
           }
 
-          // 3. Context Window Slider
+          // 3. Context Window Slider (Bounded to Model Max Architecture)
           ParameterCard(
             title = "Ventana de Contexto: $contextWindow tokens",
-            description = "Límite máximo de memoria de la conversación para recordar mensajes previos."
+            description = if (selectedModel != null) {
+              "Límite máximo soportado por ${selectedModel.name}: $modelMaxContext tokens."
+            } else {
+              "Límite de memoria de conversación para recordar mensajes previos."
+            }
           ) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text(
+                text = "Min: 256",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Box(
+                modifier = Modifier
+                  .clip(RoundedCornerShape(6.dp))
+                  .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                  .padding(horizontal = 8.dp, vertical = 2.dp)
+              ) {
+                Text(
+                  text = "Límite nativo: $modelMaxContext tokens",
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary,
+                  fontSize = 10.sp
+                )
+              }
+              Text(
+                text = "Max: $modelMaxContext",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
             Slider(
               value = contextWindow.toFloat(),
-              onValueChange = { contextWindow = it.roundToInt() },
-              valueRange = 512f..8192f,
-              steps = 14,
+              onValueChange = {
+                val newContext = it.roundToInt()
+                contextWindow = newContext
+                if (maxTokens > newContext) {
+                  maxTokens = newContext
+                }
+              },
+              valueRange = 256f..modelMaxContext.toFloat(),
               colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.primary,
                 activeTrackColor = MaterialTheme.colorScheme.primary
@@ -424,39 +468,58 @@ fun ParametersDialog(
             }
           }
 
-          // Temperature Slider
+          // Temperature Slider (Safe clamped 0.0 - 2.0)
           ParameterCard(
             title = "Temperatura: ${((temperature * 100).roundToInt() / 100.0)}",
             description = when {
-              temperature < 0.3f -> "Muy estricto, respuestas exactas y repetibles"
-              temperature < 0.8f -> "Equilibrado, respuestas naturales y coherentes"
-              else -> "Muy creativo, mayor variedad de vocabulario"
+              temperature < 0.2f -> "Determinista: Respuestas muy directas y lógicas"
+              temperature < 0.8f -> "Equilibrado: Respuestas naturales y coherentes (Recomendado)"
+              temperature <= 1.2f -> "Creativo: Mayor expresividad y riqueza léxica"
+              else -> "Muy alto: Alta aleatoriedad (Riesgo de respuestas incoherentes)"
             }
           ) {
             Slider(
               value = temperature,
               onValueChange = { temperature = it },
-              valueRange = 0.0f..1.5f,
-              steps = 14,
+              valueRange = 0.0f..2.0f,
+              steps = 19,
               modifier = Modifier.testTag("temperature_slider")
             )
           }
 
-          // Max Tokens Slider
+          // Max Tokens Slider (Clamped to Context Window)
+          val maxAllowedTokens = contextWindow.coerceAtLeast(32)
           ParameterCard(
             title = "Longitud Máxima de Respuesta: $maxTokens tokens",
-            description = "Límite de palabras generadas por respuesta (~${(maxTokens * 0.75).toInt()} palabras)"
+            description = "Tope de tokens por respuesta (Acotado por la ventana de contexto: máx $maxAllowedTokens tokens)"
           ) {
             Slider(
               value = maxTokens.toFloat(),
-              onValueChange = { maxTokens = it.roundToInt() },
-              valueRange = 64f..2048f,
-              steps = 30,
+              onValueChange = { maxTokens = it.roundToInt().coerceAtMost(maxAllowedTokens) },
+              valueRange = 32f..maxAllowedTokens.toFloat(),
               colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.secondary,
                 activeTrackColor = MaterialTheme.colorScheme.secondary
               ),
               modifier = Modifier.testTag("max_tokens_slider")
+            )
+          }
+
+          // Top-K Slider
+          ParameterCard(
+            title = "Top-K (Filtro de Vocabulario): $topK",
+            description = "Limita la selección a los $topK tokens más probables del vocabulario"
+          ) {
+            Slider(
+              value = topK.toFloat(),
+              onValueChange = { topK = it.roundToInt() },
+              valueRange = 1f..100f,
+              steps = 98,
+              colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary
+              ),
+              modifier = Modifier.testTag("top_k_slider")
             )
           }
 
@@ -468,8 +531,8 @@ fun ParametersDialog(
             Slider(
               value = cpuThreads.toFloat(),
               onValueChange = { cpuThreads = it.roundToInt() },
-              valueRange = 1f..maxAvailableCores.coerceAtLeast(4).toFloat(),
-              steps = (maxAvailableCores.coerceAtLeast(4) - 2).coerceAtLeast(0),
+              valueRange = 1f..maxAvailableCores.coerceAtLeast(1).toFloat(),
+              steps = (maxAvailableCores.coerceAtLeast(1) - 2).coerceAtLeast(0),
               colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.tertiary,
                 activeTrackColor = MaterialTheme.colorScheme.tertiary
@@ -481,13 +544,13 @@ fun ParametersDialog(
           // Top-P Slider
           ParameterCard(
             title = "Top-P (Nucleus Sampling): ${((topP * 100).roundToInt() / 100.0)}",
-            description = "Filtra la probabilidad acumulada de los tokens candidatos"
+            description = "Filtra la masa de probabilidad acumulada de los tokens candidatos"
           ) {
             Slider(
               value = topP,
               onValueChange = { topP = it },
-              valueRange = 0.1f..1.0f,
-              steps = 17,
+              valueRange = 0.01f..1.0f,
+              steps = 19,
               modifier = Modifier.testTag("top_p_slider")
             )
           }
@@ -495,13 +558,13 @@ fun ParametersDialog(
           // Repeat Penalty Slider
           ParameterCard(
             title = "Penalización por Repetición: ${((repeatPenalty * 100).roundToInt() / 100.0)}",
-            description = "Reduce la probabilidad de que el modelo repita frases idénticas"
+            description = "Reduce la probabilidad de que el modelo repita frases o bucles idénticos"
           ) {
             Slider(
               value = repeatPenalty,
               onValueChange = { repeatPenalty = it },
-              valueRange = 1.0f..1.5f,
-              steps = 9,
+              valueRange = 1.0f..2.0f,
+              steps = 19,
               modifier = Modifier.testTag("repeat_penalty_slider")
             )
           }
@@ -540,15 +603,20 @@ fun ParametersDialog(
             onClick = {
               onReset()
               selectedAccelerator = HardwareAccelerator.AUTO
-              selectedBackend = InferenceBackend.CPP_LLAMA
+              selectedBackend = when (selectedModel?.formatType) {
+                com.example.model.ModelFormatType.SAFETENSORS -> InferenceBackend.RUST_CANDLE
+                com.example.model.ModelFormatType.TFLITE -> InferenceBackend.TFLITE_RUNTIME
+                else -> InferenceBackend.CPP_LLAMA
+              }
               useMmap = true
-              contextWindow = 4096
+              contextWindow = modelMaxContext
               temperature = 0.7f
               topP = 0.90f
               topK = 40
-              maxTokens = 512
+              maxTokens = 512.coerceAtMost(modelMaxContext)
               repeatPenalty = 1.15f
-              cpuThreads = 4
+              cpuThreads = 4.coerceAtMost(maxAvailableCores)
+              systemPrompt = selectedModel?.defaultSystemPrompt ?: "Eres un asistente de IA local y privado ejecutado en este dispositivo Android."
             },
             modifier = Modifier
               .weight(1f)
@@ -579,7 +647,7 @@ fun ParametersDialog(
                 repeatPenalty = ((repeatPenalty * 100).roundToInt() / 100.0f),
                 cpuThreads = cpuThreads,
                 systemPrompt = systemPrompt
-              )
+              ).sanitize(selectedModel, maxAvailableCores)
               onSave(updated)
             },
             modifier = Modifier

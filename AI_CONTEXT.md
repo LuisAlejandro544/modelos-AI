@@ -30,6 +30,10 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
    - **Forward Pass Real en Rust (`lib.rs`):** Indexación de tensores de embedding, normalización `rms_norm`, multiplicación matricial hacia `lm_head` y muestreo probabilístico con `LogitsProcessor` (temperatura, Top-P).
    - Extracción reactiva de metadatos JSON al seleccionar archivos.
 
+3. **Modo TensorFlow Lite (`.tflite` / `.task` - Preparación de Terreno):**
+   - Integración de dependencias `tensorflow-lite`, `tensorflow-lite-gpu` y `tensorflow-lite-support`.
+   - Soporte en `ModelFormatType.TFLITE`, `InferenceBackend.TFLITE_RUNTIME`, diálogo de importación multiformato y persistencia Room.
+
 ---
 
 ## ⚡ Componentes Clave
@@ -48,6 +52,12 @@ Esta aplicación es un cliente nativo de Inteligencia Artificial para Android qu
 
 4. **Mapeo de Memoria (`mmap`):**
    - Paginación bajo demanda desde flash para optimizar RAM en teléfonos móviles.
+
+5. **Validación y Acotado de Parámetros por Arquitectura:**
+   - Restricción estricta de parámetros en `InferenceParameters.kt` y `ParametersDialog.kt`.
+   - La ventana de contexto no puede exceder el límite arquitectónico nativo (`model.contextLength`).
+   - Los tokens máximos de respuesta se ajustan automáticamente para no desbordar el contexto.
+   - Parámetros de muestreo (temperatura, top-p, top-k, repeat penalty, hilos de CPU) delimitados a rangos matemáticamente válidos para evitar errores de punto flotante o degradación del modelo.
 
 ---
 

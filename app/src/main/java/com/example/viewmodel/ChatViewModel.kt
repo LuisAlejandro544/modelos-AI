@@ -80,21 +80,23 @@ class ChatViewModel(
 
   // Model Management
   fun selectModel(model: LocalAiModel) {
-    val recommendedBackend = if (model.formatType == ModelFormatType.SAFETENSORS) {
-      InferenceBackend.RUST_CANDLE
-    } else {
-      InferenceBackend.CPP_LLAMA
+    val recommendedBackend = when (model.formatType) {
+      ModelFormatType.SAFETENSORS -> InferenceBackend.RUST_CANDLE
+      ModelFormatType.TFLITE -> InferenceBackend.TFLITE_RUNTIME
+      else -> InferenceBackend.CPP_LLAMA
     }
 
     _uiState.update {
+      val updatedParams = it.parameters.copy(
+        systemPrompt = model.defaultSystemPrompt,
+        contextWindow = model.contextLength,
+        backend = recommendedBackend
+      ).sanitize(model, it.systemSpecs.availableCores)
+
       it.copy(
         selectedModel = model,
         showModelSelectorDialog = false,
-        parameters = it.parameters.copy(
-          systemPrompt = model.defaultSystemPrompt,
-          contextWindow = model.contextLength,
-          backend = recommendedBackend
-        )
+        parameters = updatedParams
       )
     }
   }
@@ -102,14 +104,16 @@ class ChatViewModel(
   fun loadGgufModelDirect(uriOrPath: String, displayName: String? = null) {
     val newModel = repository.addGgufModel(uriOrPath, displayName, App.instance?.applicationContext)
     _uiState.update {
+      val updatedParams = it.parameters.copy(
+        systemPrompt = newModel.defaultSystemPrompt,
+        contextWindow = newModel.contextLength,
+        backend = InferenceBackend.CPP_LLAMA
+      ).sanitize(newModel, it.systemSpecs.availableCores)
+
       it.copy(
         selectedModel = newModel,
         currentScreen = CurrentScreen.CHAT,
-        parameters = it.parameters.copy(
-          systemPrompt = newModel.defaultSystemPrompt,
-          contextWindow = newModel.contextLength,
-          backend = InferenceBackend.CPP_LLAMA
-        )
+        parameters = updatedParams
       )
     }
   }
@@ -138,14 +142,16 @@ class ChatViewModel(
     )
 
     _uiState.update {
+      val updatedParams = it.parameters.copy(
+        systemPrompt = newModel.defaultSystemPrompt,
+        contextWindow = newModel.contextLength,
+        backend = InferenceBackend.RUST_CANDLE
+      ).sanitize(newModel, it.systemSpecs.availableCores)
+
       it.copy(
         selectedModel = newModel,
         currentScreen = CurrentScreen.CHAT,
-        parameters = it.parameters.copy(
-          systemPrompt = newModel.defaultSystemPrompt,
-          contextWindow = newModel.contextLength,
-          backend = InferenceBackend.RUST_CANDLE
-        )
+        parameters = updatedParams
       )
     }
   }
@@ -176,16 +182,22 @@ class ChatViewModel(
     )
 
     _uiState.update {
+      val updatedParams = it.parameters.copy(
+        systemPrompt = newModel.defaultSystemPrompt,
+        contextWindow = newModel.contextLength,
+        backend = when (formatType) {
+          ModelFormatType.GGUF -> InferenceBackend.CPP_LLAMA
+          ModelFormatType.SAFETENSORS -> InferenceBackend.RUST_CANDLE
+          ModelFormatType.TFLITE -> InferenceBackend.TFLITE_RUNTIME
+        }
+      ).sanitize(newModel, it.systemSpecs.availableCores)
+
       it.copy(
         selectedModel = newModel,
         showImportDialog = false,
         showModelSelectorDialog = false,
         currentScreen = CurrentScreen.CHAT,
-        parameters = it.parameters.copy(
-          systemPrompt = newModel.defaultSystemPrompt,
-          contextWindow = newModel.contextLength,
-          backend = if (formatType == ModelFormatType.GGUF) InferenceBackend.CPP_LLAMA else InferenceBackend.RUST_CANDLE
-        )
+        parameters = updatedParams
       )
     }
   }
@@ -218,27 +230,30 @@ class ChatViewModel(
   // Parameters Management
   fun updateParameters(newParameters: InferenceParameters) {
     _uiState.update {
+      val sanitized = newParameters.sanitize(it.selectedModel, it.systemSpecs.availableCores)
       it.copy(
-        parameters = newParameters,
+        parameters = sanitized,
         showParametersDialog = false
       )
     }
   }
 
   fun resetParameters() {
-    val defaultPrompt = _uiState.value.selectedModel?.defaultSystemPrompt
+    val currentModel = _uiState.value.selectedModel
+    val defaultPrompt = currentModel?.defaultSystemPrompt
       ?: "Eres un asistente de IA local y privado ejecutado en Android."
-    val defaultContext = _uiState.value.selectedModel?.contextLength ?: 4096
+    val defaultContext = currentModel?.contextLength ?: 4096
     _uiState.update {
-      it.copy(
-        parameters = InferenceParameters(
-          systemPrompt = defaultPrompt,
-          contextWindow = defaultContext,
-          cpuThreads = it.systemSpecs.availableCores.coerceAtMost(6),
-          accelerator = HardwareAccelerator.AUTO,
-          useMmap = true
-        )
-      )
+      val defaultParams = InferenceParameters(
+        systemPrompt = defaultPrompt,
+        contextWindow = defaultContext,
+        maxTokens = 512.coerceAtMost(defaultContext),
+        cpuThreads = it.systemSpecs.availableCores.coerceAtMost(6),
+        accelerator = HardwareAccelerator.AUTO,
+        useMmap = true
+      ).sanitize(currentModel, it.systemSpecs.availableCores)
+
+      it.copy(parameters = defaultParams)
     }
   }
 

@@ -66,8 +66,8 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   │       └── InferenceMetricsTracker.kt    # Cálculo en tiempo real de tokens/segundo, latencia y contexto
 │   │   │   │   ├── model/
 │   │   │   │   │   ├── ChatMessage.kt                # Mensajes con métricas y estado en vivo
-│   │   │   │   │   ├── InferenceParameters.kt        # HardwareAccelerator, mmap, contexto y parámetros
-│   │   │   │   │   └── LocalModel.kt                 # Definición de modelos GGUF/SafeTensors y formatos
+│   │   │   │   │   ├── InferenceParameters.kt        # HardwareAccelerator, InferenceBackend (C++, Rust, TFLite), mmap y sanitize()
+│   │   │   │   │   └── LocalModel.kt                 # Definición de modelos GGUF/SafeTensors/TFLite y formatos
 │   │   │   │   ├── ui/
 │   │   │   │   │   ├── chat/
 │   │   │   │   │   │   ├── ChatScreen.kt             # Pantalla orquestadora de chat y diálogos
@@ -78,10 +78,10 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   │   │       ├── ChatMessageBubble.kt      # Burbujas de mensajes con métricas y botón de copiado
 │   │   │   │   │   │       └── ChatWelcomeSuggestions.kt # Estado inicial con sugerencias de prompts
 │   │   │   │   │   ├── dialogs/
-│   │   │   │   │   │   ├── ImportModelDialog.kt      # Diálogo de importación de modelos de usuario
+│   │   │   │   │   │   ├── ImportModelDialog.kt      # Diálogo de importación multiformato (GGUF / SafeTensors / TFLite)
 │   │   │   │   │   │   ├── ModelSelectorDialog.kt    # Selector de modelos
-│   │   │   │   │   │   ├── ParametersDialog.kt       # Selector GPU/NPU/CPU, toggle mmap, contexto y sliders
-│   │   │   │   │   │   └── TokenizerGuideDialog.kt   # Guía de compatibilidad de tokenizadores
+│   │   │   │   │   │   ├── ParametersDialog.kt       # Selector GPU/NPU/CPU, toggle mmap, contexto dinámico y backends (C++/Rust/TFLite)
+│   │   │   │   │   │   └── TokenizerGuideDialog.kt   # Guía de compatibilidad de archivos (GGUF vs SafeTensors vs TFLite)
 │   │   │   │   │   ├── safetensors/
 │   │   │   │   │   │   ├── SafeTensorsImportScreen.kt# Pantalla orquestadora de importación SafeTensors
 │   │   │   │   │   │   ├── components/

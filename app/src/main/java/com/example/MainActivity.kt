@@ -146,6 +146,7 @@ fun LocalAiApp(viewModel: ChatViewModel) {
   if (state.showParametersDialog) {
     ParametersDialog(
       currentParameters = state.parameters,
+      selectedModel = state.selectedModel,
       maxAvailableCores = state.systemSpecs.availableCores,
       onSave = { viewModel.updateParameters(it) },
       onReset = { viewModel.resetParameters() },

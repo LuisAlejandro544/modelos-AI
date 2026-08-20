@@ -48,17 +48,18 @@ class LocalInferenceEngine(
     deviceHasNpu: Boolean = false
   ): Flow<StreamChunk> = channelFlow {
     withContext(Dispatchers.Default) {
+      val safeParams = parameters.sanitize(model)
       val metricsTracker = InferenceMetricsTracker()
       metricsTracker.onStartGeneration()
 
       val liveHardware = HardwareCapabilityDetector.resolveActiveHardwareInfo(
-        parameters.accelerator,
+        safeParams.accelerator,
         deviceHasNpu
       )
 
       // Format prompt with model template
       val formattedPrompt = ChatTemplateFormatter.formatConversation(
-        systemPrompt = parameters.systemPrompt,
+        systemPrompt = safeParams.systemPrompt,
         history = conversationHistory,
         currentPrompt = userPrompt,
         model = model
@@ -66,11 +67,11 @@ class LocalInferenceEngine(
 
       // Check if native bridges can load or execute
       val isSafeTensors = model.formatType == ModelFormatType.SAFETENSORS
-      val useNativeRust = parameters.backend == InferenceBackend.RUST_CANDLE || isSafeTensors
+      val useNativeRust = safeParams.backend == InferenceBackend.RUST_CANDLE || isSafeTensors
       val isNativeLoaded = if (useNativeRust) rustBridge.isRustLoaded else cppBridge.isNativeLoaded
 
       // Base tokens per second calculation
-      val baseTps = calculateBaseTps(parameters, model, deviceHasNpu)
+      val baseTps = calculateBaseTps(safeParams, model, deviceHasNpu)
 
       val accumulatedText = StringBuilder()
       var nativeTokensEmitted = 0
@@ -86,15 +87,15 @@ class LocalInferenceEngine(
           if (pfd != null) {
             handle = cppBridge.initGgufModelFromFd(
               fd = pfd.fd,
-              nThreads = parameters.cpuThreads,
-              contextSize = parameters.contextWindow,
-              useMmap = parameters.useMmap
+              nThreads = safeParams.cpuThreads,
+              contextSize = safeParams.contextWindow,
+              useMmap = safeParams.useMmap
             )
           } else {
             handle = cppBridge.initModelContextNative(
               modelPath = filePath,
-              nThreads = parameters.cpuThreads,
-              contextSize = parameters.contextWindow
+              nThreads = safeParams.cpuThreads,
+              contextSize = safeParams.contextWindow
             )
           }
 
@@ -102,10 +103,10 @@ class LocalInferenceEngine(
             cppBridge.generateStreamingPromptNative(
               contextHandle = handle,
               prompt = formattedPrompt,
-              temperature = parameters.temperature,
-              topP = parameters.topP,
-              repeatPenalty = parameters.repeatPenalty,
-              maxTokens = parameters.maxTokens,
+              temperature = safeParams.temperature,
+              topP = safeParams.topP,
+              repeatPenalty = safeParams.repeatPenalty,
+              maxTokens = safeParams.maxTokens,
               callback = object : NativeCppBridge.NativeTokenCallback {
                 override fun onToken(piece: String, tokenId: Int): Boolean {
                   val cleanedPiece = TextDetokenizer.cleanPiece(piece)
@@ -151,19 +152,19 @@ class LocalInferenceEngine(
             configPathOrUri = model.configPathOrUri ?: "",
             tokenizerConfigPathOrUri = model.tokenizerConfigPathOrUri ?: "",
             prompt = formattedPrompt,
-            temperature = parameters.temperature,
-            topP = parameters.topP,
-            maxTokens = parameters.maxTokens,
-            threads = parameters.cpuThreads
+            temperature = safeParams.temperature,
+            topP = safeParams.topP,
+            maxTokens = safeParams.maxTokens,
+            threads = safeParams.cpuThreads
           )
-          if (rawResult.isNotBlank()) {
+          if (rawResult.isNotBlank() && !rawResult.startsWith("⚠️")) {
             val cleanedResult = TextDetokenizer.cleanFullText(rawResult)
-            val words = cleanedResult.split(" ")
-            for (i in words.indices) {
-              val word = words[i]
-              if (i > 0) accumulatedText.append(" ")
-              accumulatedText.append(word)
-              nativeTokensEmitted++
+            val tokens = cleanedResult.split(Regex("(?<=\\s)|(?=\\s)"))
+            for (token in tokens) {
+              accumulatedText.append(token)
+              if (token.isNotBlank()) {
+                nativeTokensEmitted++
+              }
 
               val currentTps = metricsTracker.onTokenEmitted()
               val displayTps = if (currentTps > 0.5) currentTps else baseTps
@@ -180,6 +181,8 @@ class LocalInferenceEngine(
                 )
               )
             }
+          } else if (rawResult.startsWith("⚠️")) {
+            Log.w(TAG, "Mensaje de Candle SafeTensors: $rawResult")
           }
         } catch (e: Throwable) {
           Log.e(TAG, "Error en inferencia Rust SafeTensors", e)
@@ -191,7 +194,7 @@ class LocalInferenceEngine(
         val fallbackText = produceResponseText(
           prompt = userPrompt,
           model = model,
-          parameters = parameters,
+          parameters = safeParams,
           liveHardware = liveHardware,
           isNativeLoaded = isNativeLoaded
         )
@@ -298,10 +301,11 @@ class LocalInferenceEngine(
           "• Carga mmap: Reduce la presión sobre el recolector de basura de Android (ART)."
       }
 
-      p.contains("safetensor") || p.contains("gguf") || p.contains("formato") -> {
+      p.contains("safetensor") || p.contains("gguf") || p.contains("tflite") || p.contains("formato") -> {
         "📂 **Formatos de Modelos Admitidos:**\n\n" +
+          "• **GGUF (.gguf):** Formato autocontenido optimizado para llama.cpp con pesos y tokenizador en un único archivo.\n" +
           "• **SafeTensors (.safetensors):** Inferencia nativa directa con **Hugging Face Candle** en Rust. Carga con `mmap` zero-copy, decodificación BPE con `tokenizer.json` y tensores independientes.\n" +
-          "• **GGUF (.gguf):** Formato autocontenido optimizado para llama.cpp con pesos y tokenizador en un único archivo."
+          "• **TensorFlow Lite (.tflite):** Grafos cuantizados FlatBuffers optimizados para aceleradores móviles (GPU Delegate y NNAPI NPU)."
       }
 
       else -> {

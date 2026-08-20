@@ -142,14 +142,14 @@ fun TokenizerGuideDialog(
               Spacer(modifier = Modifier.width(10.dp))
               Column {
                 Text(
-                  text = "Regla de Oro: GGUF vs SafeTensors",
+                  text = "Regla de Oro: GGUF vs SafeTensors vs TFLite",
                   style = MaterialTheme.typography.titleSmall,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                  text = "• En GGUF (.gguf): Solo descargas 1 archivo. Contiene pesos, tokenizador y configs en su interior.\n• En SafeTensors (.safetensors): Se compone de varios archivos separados en Hugging Face.",
+                  text = "• En GGUF (.gguf): Solo 1 archivo autocontenido (pesos, tokenizador y configs).\n• En SafeTensors (.safetensors): Varios archivos de Hugging Face (pesos + tokenizer.json + config.json).\n• En TensorFlow Lite (.tflite): Archivo cuantizado FlatBuffers (.tflite/.task) optimizado con GPU/NNAPI.",
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                   lineHeight = 18.sp

@@ -71,6 +71,32 @@ Este documento detalla el estado actual del desarrollo y las metas para la aplic
 
 ---
 
+## 🟢 Fase 2.8: Validación y Acotado de Parámetros por Arquitectura (Completada)
+- [x] **Acotado Dinámico de Ventana de Contexto:**
+  - [x] Clamping de `contextWindow` limitado por la capacidad nativa del modelo (`model.contextLength`).
+  - [x] Visualización del límite arquitectónico con chip informativo en `ParametersDialog`.
+- [x] **Sincronización y Validación de Parámetros de Inferencia:**
+  - [x] Ajuste automático de `maxTokens` para garantizar que no sobrepase la ventana de contexto.
+  - [x] Límites matemáticos seguros para temperatura (`0.0` - `2.0`), top-p (`0.01` - `1.0`), top-k (`1` - `100`), repeat penalty (`1.0` - `2.0`) e hilos de CPU.
+  - [x] Método de saneamiento `sanitize()` en `InferenceParameters.kt` integrado en UI, ViewModel y motores nativos.
+  - [x] Suite de pruebas unitarias automatizadas para verificación de límites.
+
+---
+
+## 🟢 Fase 2.9: Preparación de Terreno para TensorFlow Lite / LiteRT (Completada)
+- [x] **Integración de Dependencias TFLite en Gradle:**
+  - [x] `tensorflow-lite` (2.16.1), `tensorflow-lite-gpu` (2.16.1) y `tensorflow-lite-support` (0.4.4).
+- [x] **Modelos de Datos y Adaptación de Formato:**
+  - [x] `ModelFormatType.TFLITE` (.tflite / .task) y `InferenceBackend.TFLITE_RUNTIME`.
+  - [x] Mapeo y persistencia Room en `ModelEntity.kt`.
+- [x] **Experiencia de Usuario e Importación:**
+  - [x] Diálogo `ImportModelDialog` con reconocimiento automático de archivos `.tflite` y campos para tokenizadores / configuraciones complementarias.
+  - [x] Actualización de la guía `TokenizerGuideDialog` y selección en `ParametersDialog`.
+- [x] **Pruebas Unitarias de Mapeo TFLite:**
+  - [x] Caso de prueba automatizado `testTFLiteModel_EntityAndFormatMapping`.
+
+---
+
 ## 🟡 Fase 3: Persistencia y Gestión Avanzada de Chats (Próxima)
 - [ ] Base de datos local **Room** para guardar y reanudar múltiples conversaciones independientes.
 - [ ] Exportación de chats a formato Markdown (`.md`) y texto plano.

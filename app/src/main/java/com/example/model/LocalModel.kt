@@ -17,6 +17,12 @@ enum class ModelFormatType(
     displayName = "SafeTensors (Rust / Candle)",
     requiresSeparateTokenizer = true,
     description = "Pesos crudos en tensores + tokenizer.json + config.json por separado."
+  ),
+  TFLITE(
+    extension = ".tflite",
+    displayName = "TensorFlow Lite (TFLite)",
+    requiresSeparateTokenizer = true,
+    description = "Modelo cuantizado .tflite / FlatBuffers + tokenizador complementario opcional."
   )
 }
 

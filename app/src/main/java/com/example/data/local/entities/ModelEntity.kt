@@ -30,10 +30,10 @@ data class ModelEntity(
   val createdAt: Long = System.currentTimeMillis()
 ) {
   fun toDomainModel(): LocalAiModel {
-    val format = if (formatType.equals("SAFETENSORS", ignoreCase = true)) {
-      ModelFormatType.SAFETENSORS
-    } else {
-      ModelFormatType.GGUF
+    val format = when {
+      formatType.equals("SAFETENSORS", ignoreCase = true) -> ModelFormatType.SAFETENSORS
+      formatType.equals("TFLITE", ignoreCase = true) -> ModelFormatType.TFLITE
+      else -> ModelFormatType.GGUF
     }
 
     return LocalAiModel(

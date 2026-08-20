@@ -43,6 +43,11 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
    - **Forward Pass y Decodificación Real:** Realiza multiplicación matricial real de embeddings, normalización RMSNorm y proyección por cabezal LM Head (`lm_head.weight`) con muestreo `LogitsProcessor` en Rust.
    - **Extracción Automática de Metadatos:** Al seleccionar `config.json` y `tokenizer_config.json`, la app extrae automáticamente la cantidad estimada de parámetros (0.5B, 1.5B, 3B), tipo de cuantización/dtype (F16, BF16) y la plantilla de formato de chat correspondiente.
 
+3. 📦 **Modo TensorFlow Lite (`.tflite` / `.task` - Preparación de Terreno):**
+   - Soporte preliminar y dependencias oficiales `tensorflow-lite`, `tensorflow-lite-gpu` y `tensorflow-lite-support` integradas en el proyecto.
+   - Diálogo de importación adaptado para reconocer archivos de modelos FlatBuffers (`.tflite`, `.task`) y asociar tokenizadores complementarios (`tokenizer.json` / `tokenizer.model` / `vocab.txt`).
+   - Soporte para delegados de aceleración por GPU móvil (OpenCL/OpenGL) y NPU (NNAPI).
+
 ---
 
 ## 🚀 Capacidades y Optimizaciones Móviles
@@ -84,16 +89,20 @@ La aplicación cuenta con dos modos principales para cargar modelos almacenados 
 
 ---
 
-## ⚙️ Parámetros Configurables
-
-- **Acelerador:** Automático (NPU con fallback a GPU), GPU Vulkan, NPU NNAPI, CPU ARM NEON.
-- **Mapeo mmap:** Activado / Desactivado.
-- **Ventana de Contexto:** 512 a 8,192 tokens.
-- **Hilos de CPU:** 1 a N núcleos.
-- **Temperatura:** 0.0 a 1.5.
-- **Top-P:** 0.1 a 1.0.
-- **Max Tokens:** 64 a 2,048 tokens por respuesta.
-- **Prompt de Sistema:** Personalizable por sesión o autocompletado según el modelo importado.
+## ⚙️ Parámetros Configurables y Validación Arquitectónica
+ 
+- **Acelerador de Hardware:** Automático (NPU con fallback a GPU), GPU Vulkan, NPU NNAPI, CPU ARM NEON.
+- **Mapeo mmap:** Activado / Desactivado (ahorro de hasta 65% de RAM).
+- **Ventana de Contexto Adaptativa:** Rango dinámico acotado automáticamente por la arquitectura nativa del modelo (`model.contextLength`, ej. 2,048 o 4,096 tokens). Impide desbordamientos de memoria contextual.
+- **Max Tokens por Respuesta:** Acotado dinámicamente para nunca exceder el tamaño de la ventana de contexto seleccionada.
+- **Hilos de CPU:** Acotado automáticamente a los núcleos físicos reales del dispositivo (`1` a `availableCores`).
+- **Muestreo Estocástico Seguro:**
+  - **Temperatura:** 0.0 a 2.0 (con redondeo a centésimas).
+  - **Top-P (Nucleus):** 0.01 a 1.0.
+  - **Top-K:** 1 a 100.
+  - **Penalización por Repetición:** 1.0 a 2.0.
+- **Prompt de Sistema:** Personalizable por sesión o autocompletado con las instrucciones nativas del modelo importado.
+- **Sanitización y Clamping Automático:** Toda modificación a través de la UI o ViewModel es saneada matemáticamente para garantizar la estabilidad de la inferencia nativa.
 
 ---
 

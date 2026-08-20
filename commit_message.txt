@@ -1,25 +1,27 @@
-refactor(modular): modularizacion de motor C++, LocalInferenceEngine y persistencia local Room
+feat(tflite): preparar terreno con dependencias tflite e integracion inicial de formato
 
-- Modularización de LocalInferenceEngine en Kotlin:
-  * Extracción de `TextDetokenizer` (`app/src/main/java/com/example/engine/tokenizer/TextDetokenizer.kt`) para desacoplar la sanitización BPE/GPT2/SPM/Hex del ciclo de inferencia.
-  * Creación de `FileDescriptorResolver` (`app/src/main/java/com/example/engine/utils/FileDescriptorResolver.kt`) para resolver descriptores `ParcelFileDescriptor` de forma segura con soporte para Content URIs y rutas del sistema de archivos.
-  * Simplificación de `LocalInferenceEngine.kt` para centrarse exclusivamente en la coordinación reactiva del flujo `Flow<StreamChunk>` y métricas de ejecución.
+- Configuración de Dependencias (`gradle/libs.versions.toml` y `app/build.gradle.kts`):
+  * Adición de las librerías oficiales de TensorFlow Lite: `tensorflow-lite` (2.16.1), `tensorflow-lite-gpu` (2.16.1) y `tensorflow-lite-support` (0.4.4).
+  * Preparación del entorno de compilación para soporte de aceleradores móviles (GPU Delegate y NNAPI Delegate).
 
-- Modularización del Motor Nativo C++ (`app/src/main/cpp/`):
-  * Creación de `context_manager.h` y `context_manager.cpp` para encapsular la estructura `GgufExecutionContext`, el mapeo de memoria `mmap`, el ciclo de vida de los handles nativos y la liberación segura de memoria.
-  * Creación de `streaming_engine.h` y `streaming_engine.cpp` para desacoplar el prefill, el bucle autorregresivo de generación, el muestreo estocástico (`Sampler`) y el envío de tokens vía callbacks JNI.
-  * Rediseño de `local_ai_engine.cpp` como tabla de exportación de funciones JNI limpias hacia `NativeCppBridge`.
-  * Actualización de `CMakeLists.txt` para incluir las nuevas unidades de compilación C++.
+- Modelo de Datos y Enums (`app/src/main/java/com/example/model/`):
+  * Incorporación de `ModelFormatType.TFLITE` (`.tflite`) con descripción técnica clara sobre tensores FlatBuffers y tokenizadores complementarios.
+  * Añadido `InferenceBackend.TFLITE_RUNTIME` ("TensorFlow Lite / LiteRT") con soporte de GPU (OpenCL/OpenGL) y NNAPI NPU.
 
-- Persistencia Local Offline con Room (`app/src/main/java/com/example/data/local/`):
-  * Implementación de la base de datos Room `LocalAiDatabase` (versión 1).
-  * Entidades `ModelEntity`, `ChatSessionEntity` y `ChatMessageEntity` con métodos bidireccionales `toDomainModel()` y `fromDomainModel()`.
-  * DAOs reactivos `ModelDao` y `ChatDao` con operaciones `Flow` para actualizaciones automáticas de interfaz y operaciones CRUD en segundo plano.
-  * Integración en `ModelRepository.kt` con sincronización bidireccional entre la base de datos Room y los estados `StateFlow`.
+- Persistencia Local (`ModelEntity.kt`):
+  * Soporte bidireccional para el formato `"TFLITE"` en la capa de persistencia Room.
 
-- Actualización de Documentación:
-  * Sincronización del mapa de arquitectura en `STRUCTURE.md` y suite de pruebas unitarias en `ExampleUnitTest.kt`.
+- Interfaz de Usuario y Diálogos (`app/src/main/java/com/example/ui/dialogs/`):
+  * `ImportModelDialog.kt`: Selector de formato TFLite, detección automática de archivos `.tflite` y `.task`, y campos para archivos opcionales de tokenizador (`tokenizer.json` / `tokenizer.model` / `vocab.txt`) y configuración (`config.json`).
+  * `TokenizerGuideDialog.kt`: Actualizada la guía visual explicativa con la comparativa GGUF vs SafeTensors vs TensorFlow Lite.
+  * `ParametersDialog.kt`: Selección y restauración adaptativa del backend TFLite Runtime.
 
-- Historial Previo de Mejoras (Preservado):
-  * Decodificación y desmapeo de bytes GPT-2/BPE (caracteres especiales Ġ, Ċ, SPM, <0xXX>) a UTF-8 real en C++ (`bpe_tokenizer.cpp`).
-  * Tabla de desmapeo inverso Unicode estándar (`createGpt2ReverseMap`) y filtrado automático de tokens estructurales (`<|im_start|>`, `<|im_end|>`, etc.).
+- ViewModel y Motor de Inferencia (`ChatViewModel.kt`, `LocalInferenceEngine.kt`):
+  * Asignación automática de backend TFLite al importar o seleccionar modelos `.tflite`.
+  * Respuestas y documentación integrada sobre compatibilidad con FlatBuffers y delegados móviles.
+
+- Pruebas Unitarias (`app/src/test/java/com/example/ExampleUnitTest.kt`):
+  * Prueba unitaria `testTFLiteModel_EntityAndFormatMapping` verificando el mapeo de entidad y propiedades del formato TFLite.
+
+- Documentación Técnica (`README.md`, `AI_CONTEXT.md`, `ROADMAP.md`, `STRUCTURE.md`):
+  * Actualización integral de la documentación del proyecto reflejando la preparación del ecosistema TensorFlow Lite.

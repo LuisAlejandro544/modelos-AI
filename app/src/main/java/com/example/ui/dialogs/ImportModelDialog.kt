@@ -103,6 +103,13 @@ fun ImportModelDialog(
       if (lastPathSegment.endsWith(".safetensors", ignoreCase = true)) {
         selectedFormat = ModelFormatType.SAFETENSORS
         detectedGgufInfo = null
+      } else if (lastPathSegment.endsWith(".tflite", ignoreCase = true) || lastPathSegment.endsWith(".task", ignoreCase = true)) {
+        selectedFormat = ModelFormatType.TFLITE
+        detectedGgufInfo = null
+        if (modelName.isBlank()) {
+          val cleanName = lastPathSegment.substringAfterLast("/").substringBeforeLast(".")
+          modelName = "${cleanName.replace("-", " ").replace("_", " ").capitalizeWords()} (TFLite)"
+        }
       } else {
         selectedFormat = ModelFormatType.GGUF
         val meta = NativeCppBridge.parseGgufMetadataSafe(uriStr, context)
@@ -302,7 +309,11 @@ fun ImportModelDialog(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                      text = if (format == ModelFormatType.GGUF) "1 archivo todo en uno" else "Pesos + Configs JSON",
+                      text = when (format) {
+                        ModelFormatType.GGUF -> "1 archivo todo en uno"
+                        ModelFormatType.SAFETENSORS -> "Pesos + Configs JSON"
+                        ModelFormatType.TFLITE -> "FlatBuffers + Tokenizer"
+                      },
                       style = MaterialTheme.typography.bodySmall,
                       fontSize = 11.sp,
                       color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -461,6 +472,53 @@ fun ImportModelDialog(
                   testTag = "generation_config_path_input",
                   buttonTestTag = "browse_generation_config_button",
                   onBrowseClick = { generationConfigPickerLauncher.launch(arrayOf("*/*")) }
+                )
+              }
+            }
+          }
+
+          // TFLite specific configs
+          if (selectedFormat == ModelFormatType.TFLITE) {
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+              ),
+              shape = RoundedCornerShape(14.dp)
+            ) {
+              Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+              ) {
+                Text(
+                  text = "Archivos Complementarios para TFLite:",
+                  style = MaterialTheme.typography.titleSmall,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary
+                )
+
+                // 2. tokenizer.json / vocab (Opcional si es .task autocontenido)
+                FileSelectorField(
+                  title = "2. Tokenizador / Vocabulario (tokenizer.json / spm.model):",
+                  badgeText = "Opcional / Recomendado",
+                  badgeColor = MaterialTheme.colorScheme.tertiary,
+                  filePath = tokenizerFilePath,
+                  placeholder = "tokenizer.json, vocab.txt o tokenizer.model",
+                  testTag = "tflite_tokenizer_path_input",
+                  buttonTestTag = "browse_tflite_tokenizer_button",
+                  onBrowseClick = { tokenizerPickerLauncher.launch(arrayOf("*/*")) }
+                )
+
+                // 3. config.json (Opcional)
+                FileSelectorField(
+                  title = "3. config.json (Arquitectura / Contexto):",
+                  badgeText = "Opcional",
+                  badgeColor = MaterialTheme.colorScheme.outline,
+                  filePath = configFilePath,
+                  placeholder = "config.json (capas, context_length)",
+                  testTag = "tflite_config_path_input",
+                  buttonTestTag = "browse_tflite_config_button",
+                  onBrowseClick = { configPickerLauncher.launch(arrayOf("*/*")) }
                 )
               }
             }
