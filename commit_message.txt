@@ -1,18 +1,25 @@
-fix(ui): correccion del padding del teclado virtual (IME) en ChatInputBar y ajuste windowSoftInputMode
+refactor(modular): modularizacion de motor C++, LocalInferenceEngine y persistencia local Room
 
-- Corrección del espacio vacío excesivo al abrir el teclado:
-  * Eliminado el uso de `WindowInsets.safeDrawing.only(Bottom)` en `ChatInputBar.kt` que sumaba la altura completa del teclado a un layout ya redimensionado.
-  * Reemplazado por `Modifier.navigationBarsPadding().imePadding()` para ajustar la barra de texto directamente sobre el teclado sin doble espaciado.
-  * Añadido `android:windowSoftInputMode="adjustResize"` a `MainActivity` en `AndroidManifest.xml` para una gestión fluida de insets en pantalla edge-to-edge.
+- Modularización de LocalInferenceEngine en Kotlin:
+  * Extracción de `TextDetokenizer` (`app/src/main/java/com/example/engine/tokenizer/TextDetokenizer.kt`) para desacoplar la sanitización BPE/GPT2/SPM/Hex del ciclo de inferencia.
+  * Creación de `FileDescriptorResolver` (`app/src/main/java/com/example/engine/utils/FileDescriptorResolver.kt`) para resolver descriptores `ParcelFileDescriptor` de forma segura con soporte para Content URIs y rutas del sistema de archivos.
+  * Simplificación de `LocalInferenceEngine.kt` para centrarse exclusivamente en la coordinación reactiva del flujo `Flow<StreamChunk>` y métricas de ejecución.
 
-- Desacoplamiento de inferencia C++ a Dispatchers.Default y streaming reactivo token a token via channelFlow:
-  * Migración de `generateResponseStream` de `flow` síncrono a `channelFlow` asíncrono con `withContext(Dispatchers.Default)`.
-  * La ejecución de matrices y el forward pass del modelo en C++ ahora ocurren en hilos secundarios de CPU, liberando por completo el hilo principal (Main Thread) de la UI de Android.
+- Modularización del Motor Nativo C++ (`app/src/main/cpp/`):
+  * Creación de `context_manager.h` y `context_manager.cpp` para encapsular la estructura `GgufExecutionContext`, el mapeo de memoria `mmap`, el ciclo de vida de los handles nativos y la liberación segura de memoria.
+  * Creación de `streaming_engine.h` y `streaming_engine.cpp` para desacoplar el prefill, el bucle autorregresivo de generación, el muestreo estocástico (`Sampler`) y el envío de tokens vía callbacks JNI.
+  * Rediseño de `local_ai_engine.cpp` como tabla de exportación de funciones JNI limpias hacia `NativeCppBridge`.
+  * Actualización de `CMakeLists.txt` para incluir las nuevas unidades de compilación C++.
 
-- Emisión en tiempo real token por token:
-  * El callback JNI `NativeTokenCallback.onToken(piece, tokenId)` envía cada fragmento generado directamente al colector de Compose mediante `trySend(...)`.
-  * Eliminada la espera síncrona que acumulaba toda la respuesta antes de mostrarla, eliminando retardos artificiales.
-  * Cálculo dinámico de tokens por segundo (TPS) en vivo por cada token emitido.
+- Persistencia Local Offline con Room (`app/src/main/java/com/example/data/local/`):
+  * Implementación de la base de datos Room `LocalAiDatabase` (versión 1).
+  * Entidades `ModelEntity`, `ChatSessionEntity` y `ChatMessageEntity` con métodos bidireccionales `toDomainModel()` y `fromDomainModel()`.
+  * DAOs reactivos `ModelDao` y `ChatDao` con operaciones `Flow` para actualizaciones automáticas de interfaz y operaciones CRUD en segundo plano.
+  * Integración en `ModelRepository.kt` con sincronización bidireccional entre la base de datos Room y los estados `StateFlow`.
 
-- Limpieza de referencias locales y control de excepciones JNI:
-  * Liberación explícita de referencias JNI locales (`callbackClass`, `jPiece`) en `local_ai_engine.cpp` para evitar fugas de memoria en la tabla de referencias JNI durante respuestas largas.
+- Actualización de Documentación:
+  * Sincronización del mapa de arquitectura en `STRUCTURE.md` y suite de pruebas unitarias en `ExampleUnitTest.kt`.
+
+- Historial Previo de Mejoras (Preservado):
+  * Decodificación y desmapeo de bytes GPT-2/BPE (caracteres especiales Ġ, Ċ, SPM, <0xXX>) a UTF-8 real en C++ (`bpe_tokenizer.cpp`).
+  * Tabla de desmapeo inverso Unicode estándar (`createGpt2ReverseMap`) y filtrado automático de tokens estructurales (`<|im_start|>`, `<|im_end|>`, etc.).

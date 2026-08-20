@@ -1,12 +1,13 @@
 package com.example.engine
 
-import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.example.App
 import com.example.engine.formatter.ChatTemplateFormatter
 import com.example.engine.hardware.HardwareCapabilityDetector
 import com.example.engine.metrics.InferenceMetricsTracker
+import com.example.engine.tokenizer.TextDetokenizer
+import com.example.engine.utils.FileDescriptorResolver
 import com.example.model.ChatMessage
 import com.example.model.HardwareAccelerator
 import com.example.model.InferenceBackend
@@ -81,16 +82,14 @@ class LocalInferenceEngine(
         var handle: Long = 0
         var pfd: ParcelFileDescriptor? = null
         try {
-          if (filePath.startsWith("content://") && ctx != null) {
-            pfd = ctx.contentResolver.openFileDescriptor(Uri.parse(filePath), "r")
-            if (pfd != null) {
-              handle = cppBridge.initGgufModelFromFd(
-                fd = pfd.fd,
-                nThreads = parameters.cpuThreads,
-                contextSize = parameters.contextWindow,
-                useMmap = parameters.useMmap
-              )
-            }
+          pfd = FileDescriptorResolver.openReadOnlyDescriptor(filePath, ctx)
+          if (pfd != null) {
+            handle = cppBridge.initGgufModelFromFd(
+              fd = pfd.fd,
+              nThreads = parameters.cpuThreads,
+              contextSize = parameters.contextWindow,
+              useMmap = parameters.useMmap
+            )
           } else {
             handle = cppBridge.initModelContextNative(
               modelPath = filePath,
@@ -109,21 +108,24 @@ class LocalInferenceEngine(
               maxTokens = parameters.maxTokens,
               callback = object : NativeCppBridge.NativeTokenCallback {
                 override fun onToken(piece: String, tokenId: Int): Boolean {
-                  accumulatedText.append(piece)
-                  nativeTokensEmitted++
+                  val cleanedPiece = TextDetokenizer.cleanPiece(piece)
+                  if (cleanedPiece.isNotEmpty()) {
+                    accumulatedText.append(cleanedPiece)
+                    nativeTokensEmitted++
 
-                  val currentTps = metricsTracker.onTokenEmitted()
-                  val displayTps = if (currentTps > 0.5) currentTps else baseTps
+                    val currentTps = metricsTracker.onTokenEmitted()
+                    val displayTps = if (currentTps > 0.5) currentTps else baseTps
 
-                  trySend(
-                    StreamChunk(
-                      partialText = accumulatedText.toString(),
-                      isFinished = false,
-                      liveTokensPerSec = ((displayTps * 10.0).toInt() / 10.0),
-                      liveHardwareInfo = liveHardware,
-                      metrics = null
+                    trySend(
+                      StreamChunk(
+                        partialText = TextDetokenizer.cleanFullText(accumulatedText.toString()),
+                        isFinished = false,
+                        liveTokensPerSec = ((displayTps * 10.0).toInt() / 10.0),
+                        liveHardwareInfo = liveHardware,
+                        metrics = null
+                      )
                     )
-                  )
+                  }
                   return true
                 }
               }
@@ -155,7 +157,8 @@ class LocalInferenceEngine(
             threads = parameters.cpuThreads
           )
           if (rawResult.isNotBlank()) {
-            val words = rawResult.split(" ")
+            val cleanedResult = TextDetokenizer.cleanFullText(rawResult)
+            val words = cleanedResult.split(" ")
             for (i in words.indices) {
               val word = words[i]
               if (i > 0) accumulatedText.append(" ")
@@ -169,7 +172,7 @@ class LocalInferenceEngine(
 
               send(
                 StreamChunk(
-                  partialText = accumulatedText.toString(),
+                  partialText = TextDetokenizer.cleanFullText(accumulatedText.toString()),
                   isFinished = false,
                   liveTokensPerSec = ((displayTps * 10.0).toInt() / 10.0),
                   liveHardwareInfo = liveHardware,

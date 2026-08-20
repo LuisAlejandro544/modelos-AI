@@ -8,12 +8,12 @@ Organización modular del código fuente de la aplicación Android.
 │   ├── build-apk.yml               # Workflow de GitHub Actions para compilar APK
 │   └── override-commit.yml         # Workflow de GitHub Actions para sincronizar mensaje de commit
 ├── app/
-│   ├── build.gradle.kts            # Configuración de dependencias, NDK (ABIs arm64-v8a/armeabi-v7a/x86_64) y CMakeLists
+│   ├── build.gradle.kts            # Configuración de dependencias, Room, KSP, NDK y CMakeLists
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── AndroidManifest.xml
-│   │   │   ├── cpp/                # Motor nativo C++ (llama.cpp NDK / CMake / GGUF v2/v3 / Tokenizador BPE/SPM / MatMul NEON / Forward Pass / Sampler)
-│   │   │   │   ├── CMakeLists.txt          # Script de construcción CMake para C++
+│   │   │   ├── cpp/                # Motor nativo C++ modular (llama.cpp NDK / GGUF v2/v3 / Tokenizador BPE/SPM / MatMul NEON / Forward Pass / Sampler)
+│   │   │   │   ├── CMakeLists.txt          # Script de construcción CMake con todos los módulos nativos C++
 │   │   │   │   ├── gguf_types.h            # Definición de especificación GGUF, magic 0x46554747, tipos GGML y metadata
 │   │   │   │   ├── gguf_parser.h           # Cabecera del parser binario de metadatos GGUF
 │   │   │   │   ├── gguf_parser.cpp         # Lector zero-copy mmap de arquitectura, tensores, vocabulario y merges
@@ -22,7 +22,11 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │   ├── dequant_matmul.h        # Rutinas de decuantización Q4_0, Q8_0, Q4_K y MatMul vectorizado ARM NEON
 │   │   │   │   ├── transformer_forward.h   # Capas del Transformer (RMSNorm, RoPE, Attention, SwiGLU/FFN y LM Head)
 │   │   │   │   ├── sampler.h               # Muestreador de logits (Temperatura, Top-P, Top-K, Repeat Penalty y Softmax)
-│   │   │   │   └── local_ai_engine.cpp     # Enlaces JNI C++, bucle autorregresivo, streaming token por token y cancelación
+│   │   │   │   ├── context_manager.h       # Gestor modular de contextos de ejecución GGUF (thread-safe handles)
+│   │   │   │   ├── context_manager.cpp     # Asignación mmap, ciclo de vida de handles y liberación de memoria C++
+│   │   │   │   ├── streaming_engine.h      # Motor de evaluación y streaming autorregresivo desacoplado
+│   │   │   │   ├── streaming_engine.cpp    # Bucle autorregresivo, muestreo estocástico y dispatch de callbacks JNI
+│   │   │   │   └── local_ai_engine.cpp     # Puntos de entrada JNI limpios que delegan a ContextManager y StreamingEngine
 │   │   │   ├── rust/               # Motor nativo Rust (Candle / UniFFI)
 │   │   │   │   ├── Cargo.toml
 │   │   │   │   └── src/
@@ -32,15 +36,28 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   │       ├── sampler.rs          # Control de interrupción y sampling de logits
 │   │   │   │       └── jni_bridge.rs       # Métodos nativos JNI con Android JVM
 │   │   │   ├── java/com/example/
-│   │   │   │   ├── App.kt          # Aplicación Android con proveedor global de ContentResolver
+│   │   │   │   ├── App.kt          # Aplicación Android con singleton de contexto
 │   │   │   │   ├── MainActivity.kt # Actividad principal y navegación Compose
 │   │   │   │   ├── data/
+│   │   │   │   │   ├── local/              # Capa de persistencia local offline con Room
+│   │   │   │   │   │   ├── LocalAiDatabase.kt      # Base de datos Room (RoomDatabase singleton)
+│   │   │   │   │   │   ├── dao/
+│   │   │   │   │   │   │   ├── ModelDao.kt         # DAO para modelos importados GGUF/SafeTensors
+│   │   │   │   │   │   │   └── ChatDao.kt          # DAO para sesiones y mensajes de chat
+│   │   │   │   │   │   └── entities/
+│   │   │   │   │   │       ├── ModelEntity.kt      # Entidad Room para catálogo persistente de modelos
+│   │   │   │   │   │       ├── ChatSessionEntity.kt# Entidad Room para sesiones de conversación
+│   │   │   │   │   │       └── ChatMessageEntity.kt# Entidad Room para mensajes con métricas
 │   │   │   │   │   └── repository/
-│   │   │   │   │       └── ModelRepository.kt        # Gestión reactiva y ciclo de vida de modelos locales (GGUF / SafeTensors)
+│   │   │   │   │       └── ModelRepository.kt  # Repositorio reactivo respaldado por Room y StateFlow
 │   │   │   │   ├── engine/
 │   │   │   │   │   ├── LocalInferenceEngine.kt       # Coordinador central de inferencia local y streaming
 │   │   │   │   │   ├── NativeCppBridge.kt            # JNI C++ (llama.cpp, NEON, Vulkan, tokenizador BPE/SPM nativo)
 │   │   │   │   │   ├── RustInferenceBridge.kt        # JNI Rust (Candle, memoria segura y ParcelFileDescriptor)
+│   │   │   │   │   ├── tokenizer/
+│   │   │   │   │   │   └── TextDetokenizer.kt        # Sanitización y desmapeo universal de bytes UTF-8 (GPT-2, SPM, hex)
+│   │   │   │   │   ├── utils/
+│   │   │   │   │   │   └── FileDescriptorResolver.kt # Apertura segura de ParcelFileDescriptor (content:// y paths)
 │   │   │   │   │   ├── formatter/
 │   │   │   │   │   │   └── ChatTemplateFormatter.kt  # Formateo de plantillas de chat (ChatML, Llama-3, Gemma, Mistral)
 │   │   │   │   │   ├── hardware/
@@ -82,7 +99,7 @@ Organización modular del código fuente de la aplicación Android.
 │   │   │   └── res/                                  # Drawables, mipmaps, strings y temas XML
 │   │   └── test/                                     # Tests unitarios y Robolectric
 │   │       ├── java/com/example/
-│   │       │   ├── ExampleUnitTest.kt                # Pruebas unitarias de Formatter, Metrics y Repository
+│   │       │   ├── ExampleUnitTest.kt                # Pruebas unitarias de Formatter, Metrics, Tokenizer, Entities y Repository
 │   │       │   └── ExampleRobolectricTest.kt         # Pruebas de integración Robolectric
 │   ├── AGENTS.md                       # Directivas obligatorias para agentes de IA
 │   ├── AI_CONTEXT.md                   # Resumen técnico y arquitectura para agentes

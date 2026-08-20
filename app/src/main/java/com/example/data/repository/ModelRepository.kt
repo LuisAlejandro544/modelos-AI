@@ -1,19 +1,46 @@
 package com.example.data.repository
 
 import android.content.Context
+import com.example.App
+import com.example.data.local.LocalAiDatabase
+import com.example.data.local.dao.ModelDao
+import com.example.data.local.entities.ModelEntity
 import com.example.engine.NativeCppBridge
 import com.example.model.LocalAiModel
 import com.example.model.ModelFormatType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.util.UUID
 
-class ModelRepository {
+class ModelRepository(
+  private val modelDao: ModelDao? = try {
+    App.instance?.let { LocalAiDatabase.getDatabase(it).modelDao() }
+  } catch (_: Throwable) {
+    null
+  },
+  private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
+) {
 
   private val _customModels = MutableStateFlow<List<LocalAiModel>>(emptyList())
   val customModels: StateFlow<List<LocalAiModel>> = _customModels.asStateFlow()
+
+  init {
+    if (modelDao != null) {
+      coroutineScope.launch {
+        try {
+          modelDao.getAllModels().collect { entities ->
+            val domainModels = entities.map { it.toDomainModel() }
+            _customModels.value = domainModels
+          }
+        } catch (_: Throwable) {}
+      }
+    }
+  }
 
   fun addGgufModel(uriOrPath: String, displayName: String? = null, context: Context? = null): LocalAiModel {
     val meta = NativeCppBridge.parseGgufMetadataSafe(uriOrPath, context)
@@ -70,6 +97,7 @@ class ModelRepository {
     )
 
     _customModels.update { listOf(newModel) + it }
+    persistModel(newModel)
     return newModel
   }
 
@@ -107,6 +135,7 @@ class ModelRepository {
     )
 
     _customModels.update { listOf(newModel) + it }
+    persistModel(newModel)
     return newModel
   }
 
@@ -146,12 +175,30 @@ class ModelRepository {
     )
 
     _customModels.update { listOf(newModel) + it }
+    persistModel(newModel)
     return newModel
   }
 
   fun deleteModel(modelId: String) {
     _customModels.update { currentList ->
       currentList.filterNot { it.id == modelId }
+    }
+    if (modelDao != null) {
+      coroutineScope.launch {
+        try {
+          modelDao.deleteModelById(modelId)
+        } catch (_: Throwable) {}
+      }
+    }
+  }
+
+  private fun persistModel(model: LocalAiModel) {
+    if (modelDao != null) {
+      coroutineScope.launch {
+        try {
+          modelDao.insertModel(ModelEntity.fromDomainModel(model))
+        } catch (_: Throwable) {}
+      }
     }
   }
 }

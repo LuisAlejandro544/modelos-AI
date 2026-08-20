@@ -13,6 +13,108 @@
 
 static const std::string SPM_SPACE = "\xe2\x96\x81"; // Lower one eighth block ' '
 
+// Static table initializing GPT-2 byte-to-unicode reverse mapping
+static std::unordered_map<uint32_t, uint8_t> createGpt2ReverseMap() {
+    std::unordered_map<uint32_t, uint8_t> map;
+    // 1. Ranges of bytes that map directly to their unicode codepoints:
+    // 33..126 ('!'..'~'), 161..172 ('¡'..'¬'), 174..255 ('®'..'ÿ')
+    std::vector<uint8_t> directBytes;
+    for (int b = 33; b <= 126; ++b) directBytes.push_back(static_cast<uint8_t>(b));
+    for (int b = 161; b <= 172; ++b) directBytes.push_back(static_cast<uint8_t>(b));
+    for (int b = 174; b <= 255; ++b) directBytes.push_back(static_cast<uint8_t>(b));
+
+    for (uint8_t b : directBytes) {
+        map[static_cast<uint32_t>(b)] = b;
+    }
+
+    // 2. Remaining 68 bytes shifted to 256 + index
+    size_t shiftedIdx = 0;
+    for (int b = 0; b < 256; ++b) {
+        uint8_t ub = static_cast<uint8_t>(b);
+        if (std::find(directBytes.begin(), directBytes.end(), ub) == directBytes.end()) {
+            uint32_t shiftedCp = 256 + static_cast<uint32_t>(shiftedIdx++);
+            map[shiftedCp] = ub;
+        }
+    }
+    return map;
+}
+
+static const std::unordered_map<uint32_t, uint8_t> g_gpt2CpToByte = createGpt2ReverseMap();
+
+std::string BpeTokenizer::decodeGpt2AndSpmBytes(const std::string& raw) {
+    if (raw.empty()) return "";
+
+    // Ignore special structural tokens
+    if (raw == "<s>" || raw == "</s>" || raw == "<|im_start|>" || raw == "<|im_end|>" ||
+        raw == "<|endoftext|>" || raw == "<|eot_id|>" || raw == "<pad>" || raw == "<unk>" ||
+        raw == "<turn_start>" || raw == "<turn_end>" || raw == "<end_of_turn>" ||
+        raw == "<start_of_turn>") {
+        return "";
+    }
+
+    uint8_t hexByte = 0;
+    if (isHexByteToken(raw, hexByte)) {
+        return std::string(1, static_cast<char>(hexByte));
+    }
+
+    std::string byteBuffer;
+    size_t i = 0;
+    const size_t len = raw.size();
+
+    while (i < len) {
+        // SentencePiece space: \xe2\x96\x81
+        if (i + 3 <= len &&
+            static_cast<uint8_t>(raw[i]) == 0xE2 &&
+            static_cast<uint8_t>(raw[i+1]) == 0x96 &&
+            static_cast<uint8_t>(raw[i+2]) == 0x81) {
+            byteBuffer += ' ';
+            i += 3;
+            continue;
+        }
+
+        // Decode UTF-8 code point
+        uint8_t b0 = static_cast<uint8_t>(raw[i]);
+        uint32_t cp = 0;
+        size_t charLen = 1;
+
+        if ((b0 & 0x80) == 0) {
+            cp = b0;
+            charLen = 1;
+        } else if ((b0 & 0xE0) == 0xC0 && i + 1 < len) {
+            uint8_t b1 = static_cast<uint8_t>(raw[i+1]);
+            cp = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+            charLen = 2;
+        } else if ((b0 & 0xF0) == 0xE0 && i + 2 < len) {
+            uint8_t b1 = static_cast<uint8_t>(raw[i+1]);
+            uint8_t b2 = static_cast<uint8_t>(raw[i+2]);
+            cp = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+            charLen = 3;
+        } else if ((b0 & 0xF8) == 0xF0 && i + 3 < len) {
+            uint8_t b1 = static_cast<uint8_t>(raw[i+1]);
+            uint8_t b2 = static_cast<uint8_t>(raw[i+2]);
+            uint8_t b3 = static_cast<uint8_t>(raw[i+3]);
+            cp = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+            charLen = 4;
+        } else {
+            byteBuffer += static_cast<char>(b0);
+            i++;
+            continue;
+        }
+
+        // Check if this codepoint is a GPT-2 encoded byte (e.g. Ġ, Ċ, č, etc.)
+        auto it = g_gpt2CpToByte.find(cp);
+        if (it != g_gpt2CpToByte.end()) {
+            byteBuffer += static_cast<char>(it->second);
+        } else {
+            byteBuffer.append(raw, i, charLen);
+        }
+
+        i += charLen;
+    }
+
+    return byteBuffer;
+}
+
 BpeTokenizer::BpeTokenizer() = default;
 BpeTokenizer::~BpeTokenizer() = default;
 
@@ -311,27 +413,7 @@ std::string BpeTokenizer::decodeToken(int32_t tokenId) const {
     }
 
     const std::string& raw = m_vocab[tokenId];
-    
-    // Check if it's a byte token <0xXX>
-    uint8_t byteVal = 0;
-    if (isHexByteToken(raw, byteVal)) {
-        return std::string(1, static_cast<char>(byteVal));
-    }
-
-    // Replace SPM_SPACE ' ' with standard space ' '
-    std::string result;
-    size_t i = 0;
-    while (i < raw.size()) {
-        if (i + 3 <= raw.size() && raw.substr(i, 3) == SPM_SPACE) {
-            result += " ";
-            i += 3;
-        } else {
-            result += raw[i];
-            i++;
-        }
-    }
-
-    return result;
+    return decodeGpt2AndSpmBytes(raw);
 }
 
 std::string BpeTokenizer::decode(const std::vector<int32_t>& tokens) const {

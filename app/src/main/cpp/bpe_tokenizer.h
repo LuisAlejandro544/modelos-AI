@@ -91,6 +91,7 @@ private:
     std::vector<int32_t> sentencePieceTokenizeWord(const std::string& word) const;
     static std::string byteToHexToken(uint8_t b);
     static bool isHexByteToken(const std::string& token, uint8_t& outByte);
+    static std::string decodeGpt2AndSpmBytes(const std::string& raw);
 };
 
 #endif // BPE_TOKENIZER_H

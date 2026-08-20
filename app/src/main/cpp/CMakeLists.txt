@@ -12,6 +12,8 @@ add_library(
     SHARED
     gguf_parser.cpp
     bpe_tokenizer.cpp
+    context_manager.cpp
+    streaming_engine.cpp
     local_ai_engine.cpp
 )
 

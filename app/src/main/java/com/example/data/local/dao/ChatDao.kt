@@ -1,0 +1,44 @@
+package com.example.data.local.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import com.example.data.local.entities.ChatMessageEntity
+import com.example.data.local.entities.ChatSessionEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface ChatDao {
+
+  @Query("SELECT * FROM chat_sessions ORDER BY updatedAt DESC")
+  fun getAllSessions(): Flow<List<ChatSessionEntity>>
+
+  @Query("SELECT * FROM chat_sessions WHERE id = :sessionId LIMIT 1")
+  suspend fun getSessionById(sessionId: String): ChatSessionEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertSession(session: ChatSessionEntity)
+
+  @Update
+  suspend fun updateSession(session: ChatSessionEntity)
+
+  @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
+  suspend fun deleteSessionById(sessionId: String)
+
+  @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY timestamp ASC")
+  fun getMessagesForSession(sessionId: String): Flow<List<ChatMessageEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertMessage(message: ChatMessageEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertMessages(messages: List<ChatMessageEntity>)
+
+  @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId")
+  suspend fun clearMessagesForSession(sessionId: String)
+
+  @Query("DELETE FROM chat_messages WHERE id = :messageId")
+  suspend fun deleteMessageById(messageId: String)
+}

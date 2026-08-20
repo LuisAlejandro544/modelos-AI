@@ -1,8 +1,11 @@
 package com.example
 
+import com.example.data.local.entities.ChatMessageEntity
+import com.example.data.local.entities.ModelEntity
 import com.example.data.repository.ModelRepository
 import com.example.engine.formatter.ChatTemplateFormatter
 import com.example.engine.metrics.InferenceMetricsTracker
+import com.example.engine.tokenizer.TextDetokenizer
 import com.example.model.ChatMessage
 import com.example.model.ChatRole
 import com.example.model.LocalAiModel
@@ -63,6 +66,50 @@ class ExampleUnitTest {
       )
     )
     assertTrue(conversationTokens >= 3)
+  }
+
+  @Test
+  fun testTextDetokenizer() {
+    val rawPiece = "ĠHolaĠmundoĊ"
+    val cleaned = TextDetokenizer.cleanPiece(rawPiece)
+    assertEquals(" Hola mundo\n", cleaned)
+
+    val hexPiece = "prueba<0x20>espacio"
+    val cleanedHex = TextDetokenizer.cleanFullText(hexPiece)
+    assertEquals("prueba espacio", cleanedHex)
+  }
+
+  @Test
+  fun testRoomEntityMapping() {
+    val domainModel = LocalAiModel(
+      id = "test-id",
+      name = "Test Model",
+      developer = "Dev",
+      parameterSize = "1B",
+      quantization = "Q4",
+      ramRequired = "1GB",
+      speedEstimate = "30 tok/s",
+      recommendedFor = "General",
+      formatType = ModelFormatType.GGUF
+    )
+
+    val entity = ModelEntity.fromDomainModel(domainModel)
+    val convertedBack = entity.toDomainModel()
+
+    assertEquals(domainModel.id, convertedBack.id)
+    assertEquals(domainModel.name, convertedBack.name)
+    assertEquals(domainModel.formatType, convertedBack.formatType)
+
+    val chatMsg = ChatMessage(
+      role = ChatRole.USER,
+      content = "Hola desde test"
+    )
+    val msgEntity = ChatMessageEntity.fromDomainModel(chatMsg, "session-1")
+    val msgBack = msgEntity.toDomainModel()
+
+    assertEquals(chatMsg.id, msgBack.id)
+    assertEquals(chatMsg.content, msgBack.content)
+    assertEquals(ChatRole.USER, msgBack.role)
   }
 
   @Test
